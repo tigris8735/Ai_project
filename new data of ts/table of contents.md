@@ -20,7 +20,7 @@
 
 ## User Stories: Poker Mentor 
 
-[user_story](user story and scenaries.md)
+[user_story](user_story_and_scenaries.md)
 
 **краткое содержание**
 ```text
