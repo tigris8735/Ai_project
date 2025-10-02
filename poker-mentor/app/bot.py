@@ -5,6 +5,8 @@ from app.config import config
 from app.database import db
 from app.game_menus import GameMenus, TextTemplates
 from app.game_manager import GameManager
+from app.hand_analyzer import hand_analyzer, history_analyzer
+
 
 # Настройка логирования
 logging.basicConfig(
@@ -45,7 +47,8 @@ class PokerMentorBot:
         self.application.add_handler(CommandHandler("settings", self._handle_settings))
         self.application.add_handler(CommandHandler("test_game", self._handle_test_game))
         self.application.add_handler(CommandHandler("choose_ai", self._handle_choose_ai))
-        
+        self.application.add_handler(CommandHandler("analyze", self._handle_analyze))  # ← ДОБАВЬ ЭТУ СТРОКУ
+
         # Обработчики кнопок и сообщений
         self.application.add_handler(CallbackQueryHandler(self._handle_callback_query))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text_message))
@@ -125,30 +128,98 @@ class PokerMentorBot:
         """Обработчик нажатий на кнопки"""
         query = update.callback_query
         await query.answer()
-        
+    
         user_id = str(update.effective_user.id)
         callback_data = query.data
-        
-        # Обрабатываем выбор AI
+    
+    # Обрабатываем выбор AI
         if callback_data.startswith("ai_"):
             ai_type = callback_data[3:]
             await self._start_game_with_ai(query, user_id, ai_type)
-        
-        # Обрабатываем игровые действия
+    
+    # Обрабатываем игровые действия
         elif callback_data.startswith("game_"):
-            action = callback_data[5:]  # Убираем "game_"
+            action = callback_data[5:]
             await self._handle_game_action(query, user_id, action)
     
+    # Обрабатываем анализ ← ДОБАВЬ ЭТОТ БЛОК
+        elif callback_data.startswith("analyze_"):
+            await self._handle_analysis(query, callback_data[8:])
+    
+    # Обрабатываем выбор позиции ← ДОБАВЬ ЭТОТ БЛОК
+        elif callback_data.startswith("position_"):
+            await self._handle_position_selection(query, callback_data[9:]) 
+
+    async def _handle_analysis(self, query, analysis_type: str):
+        """Обработчик анализа"""
+        from app.game_menus import AnalysisMenus  # ← ДОБАВЬ ЭТОТ ИМПОРТ
+    
+        if analysis_type == "preflop":
+            await query.edit_message_text(
+                "🃏 **Анализ префлоп руки**\n\n"
+                "Выберите вашу позицию за столом:",
+                reply_markup=AnalysisMenus.get_position_selection_menu()
+            )
+        elif analysis_type == "postflop":
+            await query.edit_message_text(
+                "📊 **Анализ постфлопа**\n\n"
+                "Эта функция в разработке. Используйте анализ префлопа.")
+        elif analysis_type == "hand_history":
+            await query.edit_message_text(
+                "📈 **Анализ раздачи**\n\n"
+                "Эта функция в разработке. Используйте анализ префлопа.")
+
+    async def _handle_position_selection(self, query, position: str):
+        """Обработчик выбора позиции"""
+    # Сохраняем позицию в контексте
+        context = query.data.split('_')[-1]
+    
+        await query.edit_message_text(
+            f"🎪 **Позиция: {self._get_position_name(position)}**\n\n"
+            f"Отправьте ваши карты в формате:\n"
+            f"**AKs** - Ace-King suited\n"
+            f"**QJo** - Queen-Jack offsuit\n"
+            f"**TT** - пара десяток\n\n"
+            f"Примеры: AKs, QJo, 99, T2s")
+    
+    # Сохраняем состояние ожидания ввода карт
+        self.waiting_for_cards = {
+            "user_id": query.from_user.id,
+            "position": position,
+            "message_id": query.message.message_id}
+
+    def _get_position_name(self, position: str) -> str:
+        """Получить название позиции"""
+        names = {
+            "early": "Ранняя позиция",
+            "middle": "Средняя позиция", 
+            "late": "Поздняя позиция",
+            "blinds": "Блайнды"}
+        return names.get(position, "Неизвестная позиция")
+
+    async def _handle_analyze(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /analyze"""
+        from app.game_menus import AnalysisMenus  # ← ДОБАВЬ ЭТОТ ИМПОРТ
+    
+        await update.message.reply_text(
+        "📊 **Анализ покерных рук**\n\n"
+        "Выберите тип анализа:",
+        reply_markup=AnalysisMenus.get_analysis_menu())
+
     async def _handle_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик текстовых сообщений"""
-        text = update.message.text
-        user = update.effective_user
-        
+        text = update.message.text.strip()  # ← ДОБАВЬ .strip()
+        user_id = update.effective_user.id
+
+
+        if hasattr(self, 'waiting_for_cards') and self.waiting_for_cards["user_id"] == user_id:
+            await self._process_hand_input(update, text)
+            return
         # Обрабатываем кнопки главного меню
         if text == "🎮 Быстрая игра":
             await self._handle_test_game(update, context)
         elif text == "📊 Анализ руки":
-            await update.message.reply_text("📊 Анализ руки - в разработке")
+            await self._handle_analyze(update, context)  # ← ИЗМЕНИ ЭТУ СТРОКУ
         elif text == "📈 Моя статистика":
             await update.message.reply_text("📈 Статистика - в разработке")
         elif text == "👤 Мой профиль":
@@ -239,6 +310,86 @@ class PokerMentorBot:
             reply_markup=GameMenus.get_game_actions_menu()
         )
     
+    async def _process_hand_input(self, update: Update, hand_input: str):
+        """Обработать ввод руки для анализа"""
+        try:
+            from app.poker_engine import Card, Rank, Suit  # ← ДОБАВЬ ЭТОТ ИМПОРТ
+        
+        # Получаем сохраненное состояние
+            waiting_data = self.waiting_for_cards
+            position = waiting_data["position"]
+        
+        # Парсим ввод руки
+            cards = self._parse_hand_input(hand_input)
+            if not cards:
+                await update.message.reply_text(
+                "❌ Неверный формат руки. Используйте формат: AKs, QJo, 99 и т.д.\n"
+                "Попробуйте снова:")
+                return
+        
+        # Анализируем руку
+            analysis = hand_analyzer.analyze_preflop_hand(cards, position)
+        
+        # Отправляем результат
+            analysis_text = TextTemplates.get_hand_analysis_text(analysis)
+            await update.message.reply_text(analysis_text, parse_mode='Markdown')
+        
+        # Очищаем состояние ожидания
+            del self.waiting_for_cards
+        
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка анализа: {e}")
+            if hasattr(self, 'waiting_for_cards'):
+                del self.waiting_for_cards
+
+    def _parse_hand_input(self, hand_input: str):
+        """Парсить текстовый ввод руки в карты"""
+        from app.poker_engine import Card, Rank, Suit  # ← ДОБАВЬ ЭТОТ ИМПОРТ
+    
+    # Простой парсер для демонстрации
+        if len(hand_input) < 2:
+            return None
+    
+    # Маппинг символов в ранги
+        rank_map = {
+            'A': Rank.ACE, 'K': Rank.KING, 'Q': Rank.QUEEN, 'J': Rank.JACK,
+            'T': Rank.TEN, '9': Rank.NINE, '8': Rank.EIGHT, '7': Rank.SEVEN,
+            '6': Rank.SIX, '5': Rank.FIVE, '4': Rank.FOUR, '3': Rank.THREE, '2': Rank.TWO}
+    
+        try:
+        # Парсим формат типа "AKs", "QJo", "99"
+            if len(hand_input) == 2:
+            # Пара
+                rank_char = hand_input[0]
+                if rank_char not in rank_map:
+                    return None
+                rank = rank_map[rank_char]
+                return [Card(rank, Suit.HEARTS), Card(rank, Suit.DIAMONDS)]
+        
+            elif len(hand_input) == 3:
+            # Две карты
+                rank1_char, rank2_char, suit_indicator = hand_input
+            
+                if rank1_char not in rank_map or rank2_char not in rank_map:
+                    return None
+            
+                rank1 = rank_map[rank1_char]
+                rank2 = rank_map[rank2_char]
+            
+                if suit_indicator == 's':
+                # suited
+                    return [Card(rank1, Suit.HEARTS), Card(rank2, Suit.HEARTS)]
+                elif suit_indicator == 'o':
+                # offsuit
+                    return [Card(rank1, Suit.HEARTS), Card(rank2, Suit.DIAMONDS)]
+                else:
+                    return None
+        
+            return None
+        
+        except Exception:
+            return None
+
     def run(self):
         """Запуск бота"""
         logger.info("Starting Poker Mentor Bot...")

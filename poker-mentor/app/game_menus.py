@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from app.ai_opponents import AIFactory
+from typing import Dict, List, Any, Optional  # или другие типы, которые вы используете
 
 class GameMenus:
     """Класс для управления всеми меню и кнопками"""
@@ -89,3 +90,101 @@ class TextTemplates:
 
 Используйте кнопки меню для навигации.
         """
+    
+    @staticmethod
+    def get_hand_analysis_text(analysis: Dict) -> str:
+        """Текст анализа руки"""
+        return f"""
+📊 **Анализ руки: {analysis['hand']}**
+
+💪 **Сила:** {analysis['strength']:.2f}
+🏷️ **Категория:** {analysis['category']}
+🎪 **Позиция:** {analysis['position']}
+
+📋 **Рекомендации:**
+{chr(10).join('• ' + rec for rec in analysis['recommendations'])}
+        """
+    
+    @staticmethod
+    def get_postflop_analysis_text(analysis: Dict) -> str:
+        """Текст анализа постфлопа"""
+        return f"""
+🎯 **Анализ постфлопа**
+
+📈 **Эквити:** {analysis['equity']:.1%}
+💪 **Сила руки:** {analysis['hand_strength']:.2f}
+
+💡 **Рекомендации:**
+{chr(10).join('• ' + rec for rec in analysis['recommendations'])}
+        """
+    
+    @staticmethod
+    def get_hand_history_analysis_text(analysis: Dict) -> str:
+        """Текст анализа истории раздачи"""
+        rating_emoji = "⭐" * analysis['rating']
+        
+        text = f"""
+📈 **Анализ раздачи**
+
+🏆 **Рейтинг:** {analysis['rating']}/10 {rating_emoji}
+
+"""
+        
+        if analysis['mistakes']:
+            text += f"❌ **Ошибки:**\n{chr(10).join('• ' + mistake for mistake in analysis['mistakes'])}\n\n"
+        
+        if analysis['good_plays']:
+            text += f"✅ **Хорошие решения:**\n{chr(10).join('• ' + play for play in analysis['good_plays'])}\n\n"
+        
+        if analysis['improvement_tips']:
+            text += f"💡 **Советы по улучшению:**\n{chr(10).join('• ' + tip for tip in analysis['improvement_tips'])}"
+        
+        return text
+
+# Добавляем новые меню
+class AnalysisMenus:
+    """Меню для анализа"""
+    
+    @staticmethod
+    def get_analysis_menu():
+        """Меню анализа"""
+        keyboard = [
+            [InlineKeyboardButton("🃏 Анализ префлоп руки", callback_data="analyze_preflop")],
+            [InlineKeyboardButton("📊 Анализ постфлопа", callback_data="analyze_postflop")],
+            [InlineKeyboardButton("📈 Анализ раздачи", callback_data="analyze_hand_history")],
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def get_position_selection_menu():
+        """Меню выбора позиции"""
+        keyboard = [
+            [InlineKeyboardButton("🎪 Ранняя позиция", callback_data="position_early")],
+            [InlineKeyboardButton("🎪 Средняя позиция", callback_data="position_middle")],
+            [InlineKeyboardButton("🎪 Поздняя позиция", callback_data="position_late")],
+            [InlineKeyboardButton("🎪 Блайнды", callback_data="position_blinds")],
+        ]
+        return InlineKeyboardMarkup(keyboard) 
+class AnalysisMenus:
+    @staticmethod
+    async def show_analysis_options(update, context):
+        # Ваша логика для меню анализа
+        keyboard = [
+            ["Анализ руки", "История игр"],
+            ["Статистика", "Назад"]
+        ]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text(
+            "Выберите тип анализа:",
+            reply_markup=reply_markup
+        )
+    
+    @staticmethod
+    async def handle_hand_analysis(update, context):
+        # Логика анализа конкретной руки
+        pass
+    
+    @staticmethod
+    async def handle_game_history(update, context):
+        # Логика показа истории игр
+        pass
