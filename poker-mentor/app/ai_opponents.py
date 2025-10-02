@@ -237,5 +237,27 @@ def test_ai_opponents():
         action, amount = ai.decide_action(game, "AI")
         print(f"{ai.name}: {action.value} {amount}")
 
+class MLEnhancedAI(BaseAI):
+    def __init__(self, base_ai: BaseAI, ml_model):
+        self.base_ai = base_ai
+        self.ml_model = ml_model
+        self.name = f"ML-{base_ai.name}"
+        self.confidence_threshold = 0.7
+    
+    def decide_action(self, game: PokerGame, player: str) -> Tuple[Action, int]:
+        # Извлекаем фичи для ML
+        features = self._extract_ml_features(game, player)
+        
+        # Получаем предсказание от ML
+        ml_prediction = self.ml_model.predict(features)
+        ml_confidence = self.ml_model.get_confidence(features)
+        
+        if ml_confidence > self.confidence_threshold:
+            return self._ml_action_to_game_action(ml_prediction, game)
+        else:
+            # Fallback на rule-based AI
+            return self.base_ai.decide_action(game, player)
+        
+
 if __name__ == "__main__":
     test_ai_opponents()
