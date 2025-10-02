@@ -2,6 +2,7 @@ import logging
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from app.config import config
+# from app.database import db  # Пока закомментируем БД
 
 # Настройка логирования
 logging.basicConfig(
@@ -18,25 +19,35 @@ class PokerMentorBot:
             logger.error(f"Конфигурация невалидна: {message}")
             raise ValueError(message)
         
+        # Инициализируем базу данных (пока закомментировано)
+        # db.init_db()
+        
         self.token = config.get('TELEGRAM_BOT_TOKEN')
         self.application = Application.builder().token(self.token).build()
-        self._setup_handlers()
+        self._setup_handlers()  # ← ИСПРАВЛЕНО: добавил точку перед setup_handlers
         logger.info("Poker Mentor Bot инициализирован")
     
-    def _setup_handlers(self):
+    def _setup_handlers(self):  # ← ИСПРАВЛЕНО: правильное название метода
         """Настройка обработчиков команд"""
         self.application.add_handler(CommandHandler("start", self.start))
-        self.application.add_handler(CommandHandler("help", self.show_help))  # ← ИСПРАВЛЕНО
+        self.application.add_handler(CommandHandler("help", self.show_help))
         self.application.add_handler(CommandHandler("settings", self.settings))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /start"""
         user = update.effective_user
+        
+        # Пока без БД
+        # db_user = db.add_user(
+        #     telegram_id=user.id,
+        #     username=user.username,
+        #     first_name=user.first_name,
+        #     last_name=user.last_name
+        # )
+        
         welcome_text = f"""
 🎉 Добро пожаловать в Poker Mentor, {user.first_name}!
-
-Я помогу вам научиться играть в покер через практику и анализ.
 
 📊 Доступные функции:
 • 🎮 Игра против AI с разными стилями
@@ -57,7 +68,7 @@ class PokerMentorBot:
         await update.message.reply_text(welcome_text, reply_markup=reply_markup)
         logger.info(f"New user started: {user.id} - {user.username}")
     
-    async def show_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):  # ← ДОБАВЛЕН МЕТОД
+    async def show_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /help"""
         help_text = """
 🤖 Poker Mentor - Помощь
