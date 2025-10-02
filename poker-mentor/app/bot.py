@@ -1,9 +1,10 @@
 import logging
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from app.config import config
 from app.database import db
-from app.poker_engine import PokerGame, Action
+from app.game_menus import GameMenus, TextTemplates
+from app.game_manager import GameManager
 
 # Настройка логирования
 logging.basicConfig(
@@ -13,6 +14,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class PokerMentorBot:
+    """Главный класс бота - конструктор функциональности"""
+    
     def __init__(self):
         # Проверяем конфигурацию
         is_valid, message = config.validate()
@@ -23,26 +26,37 @@ class PokerMentorBot:
         # Инициализируем базу данных
         db.init_db()
         
+        # Инициализируем менеджер игр
+        self.game_manager = GameManager()
+        
+        # Создаем приложение Telegram
         self.token = config.get('TELEGRAM_BOT_TOKEN')
         self.application = Application.builder().token(self.token).build()
-        self.active_games = {}  # Хранилище активных игр
+        
+        # Настраиваем обработчики
         self._setup_handlers()
         logger.info("Poker Mentor Bot инициализирован")
     
     def _setup_handlers(self):
-        """Настройка обработчиков команд"""
-        self.application.add_handler(CommandHandler("start", self.start))
-        self.application.add_handler(CommandHandler("help", self.show_help))
-        self.application.add_handler(CommandHandler("settings", self.settings))
-        self.application.add_handler(CommandHandler("test_game", self.test_game))
-        self.application.add_handler(CallbackQueryHandler(self.handle_button_click))
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        """Настройка обработчиков команд - конструктор функциональности"""
+        # Команды
+        self.application.add_handler(CommandHandler("start", self._handle_start))
+        self.application.add_handler(CommandHandler("help", self._handle_help))
+        self.application.add_handler(CommandHandler("settings", self._handle_settings))
+        self.application.add_handler(CommandHandler("test_game", self._handle_test_game))
+        self.application.add_handler(CommandHandler("choose_ai", self._handle_choose_ai))
+        
+        # Обработчики кнопок и сообщений
+        self.application.add_handler(CallbackQueryHandler(self._handle_callback_query))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text_message))
     
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
+    
+    async def _handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /start"""
         user = update.effective_user
         
-        # Сохраняем/обновляем пользователя в БД
+        # Сохраняем пользователя в БД
         db_user = db.add_user(
             telegram_id=user.id,
             username=user.username,
@@ -50,248 +64,26 @@ class PokerMentorBot:
             last_name=user.last_name
         )
         
-        # Получаем статистику пользователя
+        # Получаем статистику
         user_stats = db.get_user_stats(db_user['id'])
         hands_played = user_stats['total_hands_played'] if user_stats else 0
         
-        welcome_text = f"""
-🎉 Добро пожаловать в Poker Mentor, {user.first_name}!
-
-Ваш уровень: {db_user['level'].title()} 🎓
-Сыграно раздач: {hands_played}
-
-📊 Доступные функции:
-• 🎮 Игра против AI с разными стилями
-• 📈 Анализ ваших раздач  
-• 📚 Обучение стратегиям
-• 📊 Отслеживание прогресса
-
-Выберите действие из меню ниже!
-
-💡 Для тестирования игры используйте команду /test_game
-        """
-        
-        keyboard = [
-            ["🎮 Быстрая игра", "⚙️ Настроить игру"],
-            ["📊 Анализ руки", "📈 Моя статистика"],
-            ["📚 Обучение", "👤 Мой профиль"]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        
-        await update.message.reply_text(welcome_text, reply_markup=reply_markup)
-        logger.info(f"New user started: {user.id} - {user.username}")
-    
-    async def test_game(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Тестовая команда для быстрого запуска игры"""
-        user = update.effective_user
-        user_id = str(user.id)
-        
-        # Создаем новую игру
-        game = PokerGame([f"user_{user_id}", "AI_Fish"])
-        game.start_hand()
-        game.post_blinds()
-        
-        # Сохраняем игру
-        self.active_games[user_id] = game
-        
-        # Показываем карты пользователя
-        user_cards = game.player_cards[f"user_{user_id}"]
+        # Отправляем приветствие
+        welcome_text = TextTemplates.get_welcome_text(
+            user.first_name, db_user['level'], hands_played
+        )
         
         await update.message.reply_text(
-            f"🎮 ТЕСТОВАЯ ИГРА!\n\n"
-            f"🃏 Ваши карты: {user_cards[0]} {user_cards[1]}\n"
-            f"💰 Ваш стек: {game.player_stacks[f'user_{user_id}']} BB\n"
-            f"🏦 Текущий банк: {game.pot} BB\n\n"
-            f"Выберите действие:"
-        )
-        
-        # Показываем кнопки действий
-        await self.show_game_actions(update, context, user_id)
-    
-    async def show_game_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: str):
-        """Показать доступные действия в игре"""
-        game = self.active_games.get(user_id)
-        if not game:
-            await update.message.reply_text("Игра не найдена. Начните новую игру.")
-            return
-        
-        # Создаем inline-кнопки
-        keyboard = [
-            [InlineKeyboardButton("📥 Колл", callback_data="game_call")],
-            [InlineKeyboardButton("📤 Рейз", callback_data="game_raise")],
-            [InlineKeyboardButton("❌ Фолд", callback_data="game_fold")],
-            [InlineKeyboardButton("⚖️ Чек", callback_data="game_check")],
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        # Определяем текущую улицу
-        street = "Префлоп"
-        if len(game.community_cards) >= 3:
-            street = "Флоп"
-        if len(game.community_cards) >= 4:
-            street = "Терн"
-        if len(game.community_cards) >= 5:
-            street = "Ривер"
-        
-        # Отправляем сообщение с кнопками
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"🎯 Текущая улица: {street}\n"
-                 f"💰 Текущая ставка: {game.current_bet} BB\n"
-                 f"Выберите действие:",
-            reply_markup=reply_markup
+            welcome_text,
+            reply_markup=GameMenus.get_main_menu()
         )
     
-    async def handle_button_click(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка нажатий на кнопки"""
-        query = update.callback_query
-        await query.answer()
-        
-        user_id = str(update.effective_user.id)
-        action = query.data
-        
-        game = self.active_games.get(user_id)
-        if not game:
-            await query.edit_message_text("Игра не найдена. Начните новую игру командой /test_game")
-            return
-        
-        # Обрабатываем действия
-        if action == "game_fold":
-            await self.handle_fold(query, user_id)
-        elif action == "game_call":
-            await self.handle_call(query, user_id, context)
-        elif action == "game_check":
-            await self.handle_check(query, user_id)
-        elif action == "game_raise":
-            await self.handle_raise_prompt(query, user_id)
-    
-    async def handle_fold(self, query, user_id):
-        """Обработка фолда"""
-        game = self.active_games[user_id]
-        
-        await query.edit_message_text(
-            f"❌ Вы сбросили карты.\n"
-            f"Игра завершена. Банк достается оппоненту.\n\n"
-            f"Для новой игры используйте /test_game"
-        )
-        
-        # Удаляем завершенную игру
-        del self.active_games[user_id]
-    
-    async def handle_call(self, query, user_id, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка колла"""
-        game = self.active_games[user_id]
-        player = f"user_{user_id}"
-        
-        call_amount = game.current_bet
-        game.player_stacks[player] -= call_amount
-        game.pot += call_amount
-        
-        # Простая логика AI - всегда колл
-        ai_player = "AI_Fish"
-        game.player_stacks[ai_player] -= call_amount
-        game.pot += call_amount
-        
-        response_text = (
-            f"📥 Вы поставили {call_amount} BB\n"
-            f"🤖 AI: колл\n\n"
-            f"💰 Банк: {game.pot} BB\n"
-            f"💵 Ваш стек: {game.player_stacks[player]} BB"
-        )
-        
-        # Продолжаем игру - раздаем следующую улицу
-        if len(game.community_cards) == 0:
-            game.deal_flop()
-            response_text += f"\n\n🃏 Флоп: {' '.join(str(card) for card in game.community_cards)}"
-        elif len(game.community_cards) == 3:
-            game.deal_turn()
-            response_text += f"\n\n🃏 Терн: {game.community_cards[-1]}"
-        elif len(game.community_cards) == 4:
-            game.deal_river()
-            response_text += f"\n\n🃏 Ривер: {game.community_cards[-1]}"
-        else:
-            # Шоудаун - определяем победителя
-            winners = game.get_winner()
-            response_text += f"\n\n🏆 Победитель: {winners[0] if 'user' in winners[0] else 'AI'}"
-            response_text += f"\n🎯 Комбинация: {game.evaluate_showdown()[winners[0]][0].name}"
-            del self.active_games[user_id]
-            await query.edit_message_text(response_text)
-            return
-        
-        await query.edit_message_text(response_text)
-        
-        # Показываем новые кнопки действий для следующей улицы
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text="Выберите следующее действие:"
-        )
-        await self.show_game_actions_by_chat(context, query.message.chat_id, user_id)
-    
-    async def show_game_actions_by_chat(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: str):
-        """Показать кнопки действий по chat_id"""
-        game = self.active_games.get(user_id)
-        if not game:
-            return
-        
-        keyboard = [
-            [InlineKeyboardButton("📥 Колл", callback_data="game_call")],
-            [InlineKeyboardButton("📤 Рейз", callback_data="game_raise")],
-            [InlineKeyboardButton("❌ Фолд", callback_data="game_fold")],
-            [InlineKeyboardButton("⚖️ Чек", callback_data="game_check")],
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="Выберите действие:",
-            reply_markup=reply_markup
-        )
-    
-    async def handle_check(self, query, user_id):
-        """Обработка чека"""
-        await query.edit_message_text(
-            "⚖️ Вы пропустили ход\n"
-            "🤖 AI: чек\n\n"
-            "Улица завершена, переходим к следующей..."
-        )
-        # Здесь будет логика продолжения игры
-    
-    async def handle_raise_prompt(self, query, user_id):
-        """Запрос размера рейза"""
-        await query.edit_message_text(
-            "📤 Введите размер рейза (в BB):\n"
-            "Например: 10\n\n"
-            "Или отправьте 'отмена' для возврата к действиям"
-        )
-        # Здесь будем ждать ввод пользователя
-
-    # ... остальные методы (show_help, settings, handle_message и т.д.) остаются без изменений ...
-    
-    async def show_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def _handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик команды /help"""
-        help_text = """
-🤖 Poker Mentor - Помощь
-
-Основные команды:
-/start - Начать работу с ботом
-/help - Показать эту справку
-/settings - Показать настройки
-/test_game - Быстро начать тестовую игру
-
-Используйте кнопки меню для навигации:
-• 🎮 Быстрая игра - начать игру с настройками по умолчанию
-• ⚙️ Настроить игру - выбрать параметры тренировки
-• 📊 Анализ руки - разобрать конкретную раздачу
-• 📈 Моя статистика - посмотреть прогресс обучения
-• 📚 Обучение - изучить теорию покера
-• 👤 Мой профиль - настроить аккаунт
-        """
-        await update.message.reply_text(help_text)
+        await update.message.reply_text(TextTemplates.get_help_text())
     
-    async def settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать настройки"""
+    async def _handle_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /settings"""
         await update.message.reply_text(
             "⚙️ Текущие настройки:\n"
             f"• Версия: 1.0\n"
@@ -300,90 +92,151 @@ class PokerMentorBot:
             "Для изменения настроек отредактируйте файл config.txt"
         )
     
-    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка текстовых сообщений"""
+    async def _handle_test_game(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /test_game"""
+        user_id = str(update.effective_user.id)
+        
+        # Создаем тестовую игру
+        game = self.game_manager.create_game(user_id, "fish")
+        game_state = self.game_manager.get_game_state(user_id)
+        
+        # Отправляем информацию о игре
+        game_text = TextTemplates.get_game_start_text(
+            "Fish", 
+            GameMenus.get_ai_description("fish"),
+            game_state["user_cards"],
+            game_state["user_stack"],
+            game_state["pot"]
+        )
+        
+        await update.message.reply_text(game_text)
+        await self._show_game_actions(update, context, user_id)
+    
+    async def _handle_choose_ai(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /choose_ai"""
+        await update.message.reply_text(
+            "🤖 Выберите тип AI оппонента:",
+            reply_markup=GameMenus.get_ai_selection_menu()
+        )
+    
+    # ===== ОБРАБОТЧИКИ КНОПОК =====
+    
+    async def _handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик нажатий на кнопки"""
+        query = update.callback_query
+        await query.answer()
+        
+        user_id = str(update.effective_user.id)
+        callback_data = query.data
+        
+        # Обрабатываем выбор AI
+        if callback_data.startswith("ai_"):
+            ai_type = callback_data[3:]
+            await self._start_game_with_ai(query, user_id, ai_type)
+        
+        # Обрабатываем игровые действия
+        elif callback_data.startswith("game_"):
+            action = callback_data[5:]  # Убираем "game_"
+            await self._handle_game_action(query, user_id, action)
+    
+    async def _handle_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик текстовых сообщений"""
         text = update.message.text
         user = update.effective_user
         
+        # Обрабатываем кнопки главного меню
         if text == "🎮 Быстрая игра":
-            await self.quick_game(update, context)
+            await self._handle_test_game(update, context)
         elif text == "📊 Анализ руки":
-            await self.analyze_hand(update, context)
+            await update.message.reply_text("📊 Анализ руки - в разработке")
         elif text == "📈 Моя статистика":
-            await self.show_stats(update, context)
+            await update.message.reply_text("📈 Статистика - в разработке")
         elif text == "👤 Мой профиль":
-            await self.show_profile(update, context)
+            await update.message.reply_text("👤 Профиль - в разработке")
         elif text == "📚 Обучение":
-            await self.show_learning(update, context)
+            await update.message.reply_text("📚 Обучение - в разработке")
         elif text == "⚙️ Настроить игру":
-            await self.setup_game(update, context)
+            await update.message.reply_text("⚙️ Настройка игры - в разработке")
         else:
             await update.message.reply_text("Пожалуйста, используйте кнопки меню или команды!")
     
-    async def quick_game(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Быстрый старт игры"""
-        await update.message.reply_text(
-            "🎮 Запускаем быструю игру!\n\n"
-            "Используйте команду /test_game для быстрого тестирования игровой логики."
+    # ===== ИГРОВАЯ ЛОГИКА =====
+    
+    async def _start_game_with_ai(self, query, user_id: str, ai_type: str):
+        """Начать игру с выбранным AI"""
+        try:
+            # Создаем игру
+            game = self.game_manager.create_game(user_id, ai_type)
+            game_state = self.game_manager.get_game_state(user_id)
+            
+            # Отправляем информацию о игре
+            game_text = TextTemplates.get_game_start_text(
+                game_state["ai_name"],
+                GameMenus.get_ai_description(ai_type),
+                game_state["user_cards"],
+                game_state["user_stack"],
+                game_state["pot"]
+            )
+            
+            await query.edit_message_text(game_text)
+            await self._show_game_actions_by_chat(
+                query, query.message.chat_id, user_id
+            )
+            
+        except Exception as e:
+            await query.edit_message_text(f"Ошибка начала игры: {e}")
+    
+    async def _handle_game_action(self, query, user_id: str, action: str):
+        """Обработать игровое действие"""
+        # Обрабатываем действие через менеджер игр
+        result = self.game_manager.process_player_action(user_id, action)
+        
+        if "error" in result:
+            await query.edit_message_text(result["error"])
+            return
+        
+        # Формируем ответ
+        response_text = result["message"]
+        if "ai_message" in result:
+            response_text += f"\n{result['ai_message']}"
+        
+        response_text += f"\n\n💰 Банк: {result['pot']} BB"
+        response_text += f"\n💵 Ваш стек: {result['player_stack']} BB"
+        
+        # Добавляем информацию о community cards
+        if result.get("community_cards"):
+            street = "Флоп" if len(result["community_cards"]) == 3 else "Терн" if len(result["community_cards"]) == 4 else "Ривер"
+            response_text += f"\n\n🃏 {street}: {' '.join(str(card) for card in result['community_cards'])}"
+        
+        # Обрабатываем завершение игры
+        if not result.get("game_continues", True):
+            if "winner" in result:
+                response_text += f"\n\n🏆 Победитель: {result['winner']}"
+                response_text += f"\n🎯 Комбинация: {result['winning_hand']}"
+            self.game_manager.end_game(user_id)
+            await query.edit_message_text(response_text)
+            return
+        
+        # Продолжаем игру
+        await query.edit_message_text(response_text)
+        await self._show_game_actions_by_chat(query, query.message.chat_id, user_id)
+    
+    # ===== УТИЛИТЫ ДЛЯ ОТОБРАЖЕНИЯ =====
+    
+    async def _show_game_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: str):
+        """Показать игровые действия"""
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Выберите действие:",
+            reply_markup=GameMenus.get_game_actions_menu()
         )
     
-    async def analyze_hand(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Анализ руки"""
-        await update.message.reply_text(
-            "📊 Анализ раздачи\n\n"
-            "Пожалуйста, опишите раздачу в формате:\n\n"
-            "Позиция: [ваша позиция]\n"
-            "Карты: [ваши карты]\n" 
-            "Действия: [ход раздачи]\n\n"
-            "Или используйте специальный формат ввода."
-        )
-    
-    async def show_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать статистику"""
-        await update.message.reply_text(
-            "📈 Ваша статистика\n\n"
-            "📊 Общая:\n"
-            "• Сыграно раздач: 0\n"
-            "• Winrate: 0%\n"
-            "• Лучшая рука: -\n\n"
-            "🎯 В разработке...\n"
-            "Сбор статистики начнется после первых игр!"
-        )
-    
-    async def show_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать профиль"""
-        user = update.effective_user
-        await update.message.reply_text(
-            f"👤 Ваш профиль\n\n"
-            f"ID: {user.id}\n"
-            f"Имя: {user.first_name}\n"
-            f"Username: @{user.username if user.username else 'не установлен'}\n"
-            f"Уровень: Новичок 🎓\n\n"
-            f"Настройки профиля появятся позже!"
-        )
-    
-    async def show_learning(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать обучение"""
-        await update.message.reply_text(
-            "📚 Обучение покеру\n\n"
-            "Доступные разделы:\n"
-            "• 📖 Основы покера\n"
-            "• 🎯 Префлоп стратегии\n" 
-            "• 📊 Математика покера\n"
-            "• 🃏 Позиционная игра\n\n"
-            "Выберите тему для изучения!"
-        )
-    
-    async def setup_game(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Настройка игры"""
-        await update.message.reply_text(
-            "⚙️ Настройка игры\n\n"
-            "Доступные параметры:\n"
-            "• Тип игры: Cash/Tournament\n"
-            "• Размер стека\n"
-            "• Стиль оппонента\n"
-            "• Уровень сложности\n\n"
-            "Эта функция в разработке!"
+    async def _show_game_actions_by_chat(self, update, chat_id: int, user_id: str):
+        """Показать игровые действия по chat_id"""
+        await update._bot.send_message(
+            chat_id=chat_id,
+            text="Выберите действие:",
+            reply_markup=GameMenus.get_game_actions_menu()
         )
     
     def run(self):
