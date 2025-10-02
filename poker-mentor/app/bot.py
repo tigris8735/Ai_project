@@ -6,6 +6,8 @@ from app.database import db
 from app.game_menus import GameMenus, TextTemplates
 from app.game_manager import GameManager
 from app.hand_analyzer import hand_analyzer, history_analyzer
+from app.history_manager import history_manager
+from app.statistics import stats_manager
 
 # В начале файла добавьте:
 from app.poker_engine import Card, Rank, Suit
@@ -52,7 +54,9 @@ class PokerMentorBot:
         self.application.add_handler(CommandHandler("choose_ai", self._handle_choose_ai))
         self.application.add_handler(CommandHandler("analyze", self._handle_analyze))  # ← ДОБАВЬ ЭТУ СТРОКУ
         self.application.add_handler(CommandHandler("debug", self._handle_debug))
-        
+        self.application.add_handler(CommandHandler("history", self._handle_history))
+        self.application.add_handler(CommandHandler("stats", self._handle_stats))
+
         # Обработчики кнопок и сообщений
         self.application.add_handler(CallbackQueryHandler(self._handle_callback_query))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text_message))
@@ -485,6 +489,41 @@ class PokerMentorBot:
         """
         await update.message.reply_text(debug_info)
 
+    async def _handle_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать историю игр"""
+        user_id = update.effective_user.id
+        sessions = history_manager.get_user_sessions(user_id)
+    
+        if not sessions:
+            await update.message.reply_text("📝 У вас еще нет сыгранных сессий")
+            return
+    
+        history_text = "📊 **История ваших игр:**\n\n"
+        for session in sessions[:5]:  # Показываем последние 5
+            history_text += f"🎮 {session['date']} vs {session['ai_opponent']}\n"
+            history_text += f"   Рук: {session['hands_played']} | Результат: {session['result']}\n\n"
+    
+        await update.message.reply_text(history_text, parse_mode='Markdown')
+
+    async def _handle_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать статистику"""
+        user_id = update.effective_user.id
+        dashboard = stats_manager.get_user_dashboard(user_id)
+    
+        stats_text = "📈 **Ваша статистика:**\n\n"
+        stats_text += f"🎯 **Уровень:** {dashboard['overview']['level'].title()}\n"
+        stats_text += f"🃏 **Сыграно рук:** {dashboard['overview']['total_hands']}\n"
+        stats_text += f"📊 **Винрейт:** {dashboard['win_rates']['overall']}\n\n"
+    
+        stats_text += "⚠️ **Основные утечки:**\n"
+        for leak in dashboard['leaks'][:2]:
+            stats_text += f"• {leak}\n"
+    
+        stats_text += "\n💡 **Рекомендации:**\n"
+        for improvement in dashboard['improvements'][:2]:
+            stats_text += f"• {improvement}\n"
+    
+        await update.message.reply_text(stats_text, parse_mode='Markdown')
 
 # Точка входа
 if __name__ == "__main__":
