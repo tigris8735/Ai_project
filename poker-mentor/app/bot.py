@@ -8,6 +8,7 @@ from app.game_manager import GameManager
 from app.hand_analyzer import hand_analyzer, history_analyzer
 from app.history_manager import history_manager
 from app.statistics import stats_manager
+from app.ml.model_trainer import model_trainer
 
 # В начале файла добавьте:
 from app.poker_engine import Card, Rank, Suit
@@ -50,13 +51,18 @@ class PokerMentorBot:
         self.application.add_handler(CommandHandler("start", self._handle_start))
         self.application.add_handler(CommandHandler("help", self._handle_help))
         self.application.add_handler(CommandHandler("settings", self._handle_settings))
+
         self.application.add_handler(CommandHandler("test_game", self._handle_test_game))
         self.application.add_handler(CommandHandler("choose_ai", self._handle_choose_ai))
+
         self.application.add_handler(CommandHandler("analyze", self._handle_analyze))  # ← ДОБАВЬ ЭТУ СТРОКУ
         self.application.add_handler(CommandHandler("debug", self._handle_debug))
+
         self.application.add_handler(CommandHandler("history", self._handle_history))
         self.application.add_handler(CommandHandler("stats", self._handle_stats))
 
+        self.application.add_handler(CommandHandler("ml_status", self._handle_ml_status))
+        self.application.add_handler(CommandHandler("train_ml", self._handle_train_ml))
         # Обработчики кнопок и сообщений
         self.application.add_handler(CallbackQueryHandler(self._handle_callback_query))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text_message))
@@ -492,39 +498,75 @@ class PokerMentorBot:
     async def _handle_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показать историю игр"""
         user_id = update.effective_user.id
-        sessions = history_manager.get_user_sessions(user_id)
+        sessions = history_manager.get_recent_sessions(user_id, 5)
     
         if not sessions:
             await update.message.reply_text("📝 У вас еще нет сыгранных сессий")
             return
     
-        history_text = "📊 **История ваших игр:**\n\n"
-        for session in sessions[:5]:  # Показываем последние 5
-            history_text += f"🎮 {session['date']} vs {session['ai_opponent']}\n"
-            history_text += f"   Рук: {session['hands_played']} | Результат: {session['result']}\n\n"
+        text = "📊 **Последние игры:**\n\n"
+        for session in sessions:
+            text += f"🕐 **{session['date']}**\n"
+            text += f"🤖 Оппонент: {session['opponent']}\n"
+            text += f"🎯 Рук: {session['hands_played']} | Результат: {session['result']}\n"
+            text += f"⏱️ Длительность: {session['duration']}\n\n"
     
-        await update.message.reply_text(history_text, parse_mode='Markdown')
+        await update.message.reply_text(text, parse_mode='Markdown')
 
     async def _handle_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показать статистику"""
         user_id = update.effective_user.id
-        dashboard = stats_manager.get_user_dashboard(user_id)
+        stats = stats_manager.get_user_stats(user_id)
     
-        stats_text = "📈 **Ваша статистика:**\n\n"
-        stats_text += f"🎯 **Уровень:** {dashboard['overview']['level'].title()}\n"
-        stats_text += f"🃏 **Сыграно рук:** {dashboard['overview']['total_hands']}\n"
-        stats_text += f"📊 **Винрейт:** {dashboard['win_rates']['overall']}\n\n"
+        text = "📈 **Ваша статистика:**\n\n"
+        text += f"🎓 **Уровень:** {stats['level'].title()}\n"
+        text += f"🃏 **Сыграно рук:** {stats['total_hands']}\n"
+        text += f"📊 **Винрейт:** {stats['win_rate']}\n"
+        text += f"🎯 **VPIP/PFR:** {stats['vpip']}/{stats['pfr']}\n"
+        text += f"⚡ **Агрессия:** {stats['aggression']}\n\n"
     
-        stats_text += "⚠️ **Основные утечки:**\n"
-        for leak in dashboard['leaks'][:2]:
-            stats_text += f"• {leak}\n"
+        text += "⭐ **Лучшая рука:** {stats['best_hand']}\n"
+        text += "💡 **Основная утечка:** {stats['worst_leak']}\n"
+        text += "📈 **Прогресс за месяц:** {stats['monthly_progress']}\n\n"
     
-        stats_text += "\n💡 **Рекомендации:**\n"
-        for improvement in dashboard['improvements'][:2]:
-            stats_text += f"• {improvement}\n"
+        text += "_Используйте /history для просмотра последних игр_"
     
-        await update.message.reply_text(stats_text, parse_mode='Markdown')
+        await update.message.reply_text(text, parse_mode='Markdown')
+    async def _handle_ml_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статус ML системы"""
+        status = model_trainer.get_training_status()
+    
+        text = "🤖 **Статус ML системы:**\n\n"
+        text += f"📊 **Данных собрано:** {status['data_collected']}\n"
+        text += f"🎯 **Статус:** {status['status']}\n"
+        text += f"💡 **Рекомендация:** {status['recommendation']}\n\n"
+    
+        if status['data_collected'] > 0:
+            text += "_Используйте /train_ml для запуска обучения_"
+    
+        await update.message.reply_text(text, parse_mode='Markdown')
 
+    async def _handle_train_ml(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Запуск обучения ML модели"""
+        result = model_trainer.start_training()
+    
+        text = "🎯 **Результат обучения ML:**\n\n"
+    
+        if result['status'] == 'success':
+            text += "✅ **Обучение завершено!**\n"
+            text += f"📈 **Точность:** {result['accuracy']}\n"
+            text += f"💡 **Следующий шаг:** {result['next_step']}\n"
+        elif result['status'] == 'need_more_data':
+            text += "📊 **Нужно больше данных:**\n"
+            text += f"📝 {result['message']}\n"
+            text += "💡 _Продолжайте играть для сбора данных_"
+        else:
+            text += "❌ **Ошибка обучения:**\n"
+            text += f"⚠️ {result['message']}"
+    
+        await update.message.reply_text(text, parse_mode='Markdown')
+
+        
 # Точка входа
 if __name__ == "__main__":
     try:
