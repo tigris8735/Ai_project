@@ -2,7 +2,7 @@ import logging
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from app.config import config
-# from app.database import db  # Пока закомментируем БД
+from app.database import db  # Пока закомментируем БД
 
 # Настройка логирования
 logging.basicConfig(
@@ -20,7 +20,7 @@ class PokerMentorBot:
             raise ValueError(message)
         
         # Инициализируем базу данных (пока закомментировано)
-        # db.init_db()
+        db.init_db()
         
         self.token = config.get('TELEGRAM_BOT_TOKEN')
         self.application = Application.builder().token(self.token).build()
@@ -39,15 +39,18 @@ class PokerMentorBot:
         user = update.effective_user
         
         # Пока без БД
-        # db_user = db.add_user(
-        #     telegram_id=user.id,
-        #     username=user.username,
-        #     first_name=user.first_name,
-        #     last_name=user.last_name
-        # )
+        db_user = db.add_user(
+        telegram_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name
+        )
         
         welcome_text = f"""
 🎉 Добро пожаловать в Poker Mentor, {user.first_name}!
+
+Ваш уровень: {db_user.level.value.title()} 🎓
+Сыграно раздач: 0
 
 📊 Доступные функции:
 • 🎮 Игра против AI с разными стилями

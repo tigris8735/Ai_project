@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.models import Base, User, GameSession, HandHistory, UserStats
 from app.config import config
+from datetime import datetime  # ← ДОБАВИТЬ ЭТОТ ИМПОРТ
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ class Database:
             # Проверяем, существует ли пользователь
             existing_user = session.query(User).filter(User.telegram_id == telegram_id).first()
             if existing_user:
+                # Обновляем время активности
+                existing_user.last_active = datetime.utcnow()
+                session.commit()
                 return existing_user
             
             # Создаем нового пользователя
