@@ -53,8 +53,11 @@ class HandAnalyzer:
         
         return high_card_strength + suited_bonus + connector_bonus
     
-    def analyze_preflop_hand(self, cards: List[Card], position: str) -> Dict:
-        """Анализ префлоп руки"""
+# В hand_analyzer.py - ДОБАВИТЬ:
+
+def analyze_preflop_hand(self, cards: List[Card], position: str) -> Dict:
+    """Анализ префлоп руки с обработкой ошибок"""
+    try:
         if len(cards) != 2:
             return {"error": "Для анализа нужно 2 карты"}
         
@@ -82,13 +85,17 @@ class HandAnalyzer:
         
         return {
             "hand": f"{card1.rank.value}{card2.rank.value}{'s' if suited else 'o'}",
-            "strength": adjusted_strength,
+            "strength": round(adjusted_strength, 2),
             "category": self._get_hand_category(adjusted_strength),
             "recommendations": recommendations,
             "position": position,
             "suited": suited,
             "is_pair": is_pair
         }
+        
+    except Exception as e:
+        logger.error(f"Ошибка анализа руки: {e}")
+        return {"error": f"Ошибка анализа: {str(e)}"}
     
     def _get_hand_category(self, strength: float) -> str:
         """Определить категорию руки"""

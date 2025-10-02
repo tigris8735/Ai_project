@@ -1,6 +1,7 @@
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from app.ai_opponents import AIFactory
-from typing import Dict, List, Any, Optional  # или другие типы, которые вы используете
+# В game_menus.py - ДОБАВИТЬ в начало
+from typing import Dict, List, Any, Optional, Tuple
 
 class GameMenus:
     """Класс для управления всеми меню и кнопками"""
@@ -42,104 +43,58 @@ class GameMenus:
         """Получить описание AI оппонента"""
         return AIFactory.get_ai_description(ai_type)
 
+# В game_menus.py - ОБНОВИТЬ TextTemplates:
+
 class TextTemplates:
-    """Класс для текстовых шаблонов"""
+    """Улучшенные текстовые шаблоны"""
     
     @staticmethod
     def get_welcome_text(user_name: str, level: str, hands_played: int) -> str:
+        level_emojis = {
+            "beginner": "🟢",
+            "intermediate": "🟡", 
+            "advanced": "🔴"
+        }
+        
         return f"""
 🎉 Добро пожаловать в Poker Mentor, {user_name}!
 
-Ваш уровень: {level.title()} 🎓
-Сыграно раздач: {hands_played}
+{level_emojis.get(level, '🎓')} **Ваш уровень:** {level.title()}
+📊 **Сыграно раздач:** {hands_played}
 
-📊 Доступные функции:
+🚀 **Доступные функции:**
 • 🎮 Игра против AI с разными стилями
-• 📈 Анализ ваших раздач  
+• 📊 Анализ ваших раздач  
 • 📚 Обучение стратегиям
-• 📊 Отслеживание прогресса
+• 📈 Отслеживание прогресса
 
-Выберите действие из меню ниже!
+💡 **Совет:** Начните с быстрой игры против Fish AI чтобы попрактиковаться!
 
-💡 Для тестирования игры используйте команду /test_game
-        """
-    
-    @staticmethod
-    def get_game_start_text(ai_name: str, ai_description: str, user_cards: list, user_stack: int, pot: int) -> str:
-        return (
-            f"🎮 Игра началась!\n"
-            f"🤖 Оппонент: {ai_name}\n"
-            f"📝 {ai_description}\n\n"
-            f"🃏 Ваши карты: {user_cards[0]} {user_cards[1]}\n"
-            f"💰 Ваш стек: {user_stack} BB\n"
-            f"🏦 Текущий банк: {pot} BB\n\n"
-            f"Выберите действие:"
-        )
-    
-    @staticmethod
-    def get_help_text() -> str:
-        return """
-🤖 Poker Mentor - Помощь
-
-Основные команды:
-/start - Начать работу с ботом
-/help - Показать эту справку
-/settings - Показать настройки
-/test_game - Быстро начать тестовую игру
-/choose_ai - Выбрать AI оппонента
-
-Используйте кнопки меню для навигации.
+Выберите действие из меню ниже 👇
         """
     
     @staticmethod
     def get_hand_analysis_text(analysis: Dict) -> str:
-        """Текст анализа руки"""
+        """Улучшенный текст анализа руки"""
+        if "error" in analysis:
+            return f"❌ {analysis['error']}"
+            
+        strength_bar = "█" * int(analysis['strength'] * 10) + "▒" * (10 - int(analysis['strength'] * 10))
+        
         return f"""
-📊 **Анализ руки: {analysis['hand']}**
+📊 **Анализ руки: {analysis['hand'].upper()}**
 
-💪 **Сила:** {analysis['strength']:.2f}
+💪 **Сила:** {analysis['strength']:.2f} 
+{strength_bar}
 🏷️ **Категория:** {analysis['category']}
 🎪 **Позиция:** {analysis['position']}
+🎯 **Тип:** {'Пара' if analysis['is_pair'] else 'Suited' if analysis['suited'] else 'Offsuit'}
 
 📋 **Рекомендации:**
 {chr(10).join('• ' + rec for rec in analysis['recommendations'])}
+
+💡 *Используйте эти рекомендации для принятия решения*
         """
-    
-    @staticmethod
-    def get_postflop_analysis_text(analysis: Dict) -> str:
-        """Текст анализа постфлопа"""
-        return f"""
-🎯 **Анализ постфлопа**
-
-📈 **Эквити:** {analysis['equity']:.1%}
-💪 **Сила руки:** {analysis['hand_strength']:.2f}
-
-💡 **Рекомендации:**
-{chr(10).join('• ' + rec for rec in analysis['recommendations'])}
-        """
-    
-    @staticmethod
-    def get_hand_history_analysis_text(analysis: Dict) -> str:
-        """Текст анализа истории раздачи"""
-        rating_emoji = "⭐" * analysis['rating']
-        
-        text = f"""
-📈 **Анализ раздачи**
-
-🏆 **Рейтинг:** {analysis['rating']}/10 {rating_emoji}
-
-"""
-        
-        if analysis['mistakes']:
-            text += f"❌ **Ошибки:**\n{chr(10).join('• ' + mistake for mistake in analysis['mistakes'])}\n\n"
-        
-        if analysis['good_plays']:
-            text += f"✅ **Хорошие решения:**\n{chr(10).join('• ' + play for play in analysis['good_plays'])}\n\n"
-        
-        if analysis['improvement_tips']:
-            text += f"💡 **Советы по улучшению:**\n{chr(10).join('• ' + tip for tip in analysis['improvement_tips'])}"
-        
-        return text
 
 # Добавляем новые меню
 class AnalysisMenus:
@@ -165,28 +120,3 @@ class AnalysisMenus:
             [InlineKeyboardButton("🎪 Блайнды", callback_data="position_blinds")],
         ]
         return InlineKeyboardMarkup(keyboard)
-    
-
-class AnalysisMenus:
-    @staticmethod
-    async def show_analysis_options(update, context):
-        # Ваша логика для меню анализа
-        keyboard = [
-            ["Анализ руки", "История игр"],
-            ["Статистика", "Назад"]
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text(
-            "Выберите тип анализа:",
-            reply_markup=reply_markup
-        )
-    
-    @staticmethod
-    async def handle_hand_analysis(update, context):
-        # Логика анализа конкретной руки
-        pass
-    
-    @staticmethod
-    async def handle_game_history(update, context):
-        # Логика показа истории игр
-        pass

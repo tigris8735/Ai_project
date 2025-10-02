@@ -51,7 +51,8 @@ class PokerMentorBot:
         self.application.add_handler(CommandHandler("test_game", self._handle_test_game))
         self.application.add_handler(CommandHandler("choose_ai", self._handle_choose_ai))
         self.application.add_handler(CommandHandler("analyze", self._handle_analyze))  # ← ДОБАВЬ ЭТУ СТРОКУ
-
+        self.application.add_handler(CommandHandler("debug", self._handle_debug))
+        
         # Обработчики кнопок и сообщений
         self.application.add_handler(CallbackQueryHandler(self._handle_callback_query))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text_message))
@@ -399,6 +400,91 @@ class PokerMentorBot:
         print("🤖 Запуск Poker Mentor Bot...")
         print("🛑 Для остановки нажмите Ctrl+C")
         self.application.run_polling()
+# ДОБАВИТЬ в класс PokerMentorBot:
+
+    async def _handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик нажатий на кнопки с улучшенной обработкой ошибок"""
+        try:
+            query = update.callback_query
+            await query.answer()
+        
+            user_id = str(update.effective_user.id)
+            callback_data = query.data
+
+        # Обрабатываем выбор AI
+            if callback_data.startswith("ai_"):
+                ai_type = callback_data[3:]
+                await self._start_game_with_ai(query, user_id, ai_type)
+
+        # Обрабатываем игровые действия
+            elif callback_data.startswith("game_"):
+                action = callback_data[5:]
+                await self._handle_game_action(query, user_id, action)
+
+        # Обрабатываем анализ
+            elif callback_data.startswith("analyze_"):
+                await self._handle_analysis(query, callback_data[8:])
+
+        # Обрабатываем выбор позиции
+            elif callback_data.startswith("position_"):
+                await self._handle_position_selection(query, callback_data[9:])
+            
+            else:
+                await query.edit_message_text("❌ Неизвестная команда")
+
+        except Exception as e:
+            logger.error(f"Ошибка в callback: {e}")
+            await update.callback_query.edit_message_text("❌ Произошла ошибка. Попробуйте снова.")
+
+    async def _handle_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик текстовых сообщений с улучшенной обработкой ошибок"""
+        try:
+            text = update.message.text.strip()
+            user_id = update.effective_user.id
+
+            # Проверяем ожидание ввода карт
+            if hasattr(self, 'waiting_for_cards') and self.waiting_for_cards.get("user_id") == user_id:
+                await self._process_hand_input(update, text)
+                return
+
+        # Обрабатываем кнопки главного меню
+            menu_actions = {
+                "🎮 Быстрая игра": self._handle_test_game,
+                "📊 Анализ руки": self._handle_analyze,
+                "📈 Моя статистика": lambda u, c: u.message.reply_text("📈 Статистика - в разработке"),
+                "👤 Мой профиль": lambda u, c: u.message.reply_text("👤 Профиль - в разработке"),
+                "📚 Обучение": lambda u, c: u.message.reply_text("📚 Обучение - в разработке"),
+                "⚙️ Настроить игру": lambda u, c: u.message.reply_text("⚙️ Настройка игры - в разработке")
+            }
+
+            if text in menu_actions:
+                await menu_actions[text](update, context)
+            else:
+                await update.message.reply_text(
+                    "🤔 Я не понял команду. Пожалуйста, используйте кнопки меню!",
+                    reply_markup=GameMenus.get_main_menu()
+                )
+            
+        except Exception as e:
+            logger.error(f"Ошибка обработки сообщения: {e}")
+            await update.message.reply_text("❌ Произошла ошибка. Попробуйте снова.")
+
+    async def _handle_debug(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда для отладки (/debug)"""
+        user_id = update.effective_user.id
+        debug_info = f"""
+🔧  **Отладочная информация**
+
+    👤 Пользователь: {user_id}
+    🎮 Активных игр: {len(self.game_manager.active_games)}
+    💾 База данных: {config.get('DATABASE_URL')}
+
+    📊 Статистика:
+    • Пользователей в БД: {self._get_user_count()}
+    • Игровых сессий: {self._get_session_count()}
+        """
+        await update.message.reply_text(debug_info)
+
 
 # Точка входа
 if __name__ == "__main__":

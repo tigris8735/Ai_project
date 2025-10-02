@@ -88,6 +88,19 @@ DEFAULT_GAME_TYPE=cash
             return False, error_msg
         
         return True, "Конфигурация валидна"
+        
+# В config.py ДОБАВИТЬ:
+
+    def setup_logging():
+        """Настройка расширенного логирования"""
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('poker_mentor.log', encoding='utf-8'),
+                logging.StreamHandler()
+            ]
+        )
 
 # Глобальный объект конфигурации
 config = Config()
