@@ -164,7 +164,9 @@ class AnalysisMenus:
             [InlineKeyboardButton("🎪 Поздняя позиция", callback_data="position_late")],
             [InlineKeyboardButton("🎪 Блайнды", callback_data="position_blinds")],
         ]
-        return InlineKeyboardMarkup(keyboard) 
+        return InlineKeyboardMarkup(keyboard)
+    
+
 class AnalysisMenus:
     @staticmethod
     async def show_analysis_options(update, context):

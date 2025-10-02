@@ -7,6 +7,9 @@ from app.game_menus import GameMenus, TextTemplates
 from app.game_manager import GameManager
 from app.hand_analyzer import hand_analyzer, history_analyzer
 
+# В начале файла добавьте:
+from app.poker_engine import Card, Rank, Suit
+from app.game_menus import AnalysisMenus
 
 # Настройка логирования
 logging.basicConfig(
