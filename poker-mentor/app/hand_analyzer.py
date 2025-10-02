@@ -55,47 +55,47 @@ class HandAnalyzer:
     
 # В hand_analyzer.py - ДОБАВИТЬ:
 
-def analyze_preflop_hand(self, cards: List[Card], position: str) -> Dict:
-    """Анализ префлоп руки с обработкой ошибок"""
-    try:
-        if len(cards) != 2:
-            return {"error": "Для анализа нужно 2 карты"}
+    def analyze_preflop_hand(self, cards: List[Card], position: str) -> Dict:
+        """Анализ префлоп руки с обработкой ошибок"""
+        try:
+            if len(cards) != 2:
+                return {"error": "Для анализа нужно 2 карты"}
         
-        card1, card2 = cards
-        hand_key = (card1.rank.value, card2.rank.value)
-        suited = card1.suit == card2.suit
-        is_pair = card1.rank == card2.rank
+            card1, card2 = cards
+            hand_key = (card1.rank.value, card2.rank.value)
+            suited = card1.suit == card2.suit
+            is_pair = card1.rank == card2.rank
         
-        strength = self.hand_strengths.get(hand_key, 0.5)
+            strength = self.hand_strengths.get(hand_key, 0.5)
         
-        # Рекомендации по позиции
-        position_multiplier = {
-            "early": 0.8,   # Ранняя позиция - играем тайтовее
-            "middle": 1.0,  # Средняя позиция
-            "late": 1.2,    # Поздняя позиция - играем лузовее
-            "blinds": 0.9   # Блайнды
-        }.get(position, 1.0)
+            # Рекомендации по позиции
+            position_multiplier = {
+                "early": 0.8,   # Ранняя позиция - играем тайтовее
+                "middle": 1.0,  # Средняя позиция
+                "late": 1.2,    # Поздняя позиция - играем лузовее
+                "blinds": 0.9   # Блайнды
+            }.get(position, 1.0)
         
-        adjusted_strength = strength * position_multiplier
+            adjusted_strength = strength * position_multiplier
         
-        # Генерация рекомендаций
-        recommendations = self._generate_preflop_recommendations(
-            cards, adjusted_strength, position
-        )
+            # Генерация рекомендаций
+            recommendations = self._generate_preflop_recommendations(
+                cards, adjusted_strength, position
+            )
         
-        return {
-            "hand": f"{card1.rank.value}{card2.rank.value}{'s' if suited else 'o'}",
-            "strength": round(adjusted_strength, 2),
-            "category": self._get_hand_category(adjusted_strength),
-            "recommendations": recommendations,
-            "position": position,
-            "suited": suited,
-            "is_pair": is_pair
-        }
+            return {
+                "hand": f"{card1.rank.value}{card2.rank.value}{'s' if suited else 'o'}",
+                "strength": round(adjusted_strength, 2),
+                "category": self._get_hand_category(adjusted_strength),
+                "recommendations": recommendations,
+                "position": position,
+                "suited": suited,
+                "is_pair": is_pair
+            }
         
-    except Exception as e:
-        logger.error(f"Ошибка анализа руки: {e}")
-        return {"error": f"Ошибка анализа: {str(e)}"}
+        except Exception as e:
+            logger.error(f"Ошибка анализа руки: {e}")
+            return {"error": f"Ошибка анализа: {str(e)}"}
     
     def _get_hand_category(self, strength: float) -> str:
         """Определить категорию руки"""
