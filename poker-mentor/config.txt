@@ -1,0 +1,2 @@
+# Конфигурация Poker Mentor Bot
+TELEGRAM_BOT_TOKEN=8323676065:AAHBKbwyjpTPQjE7v9aRIElmSOk1A7uHtjY
