@@ -66,6 +66,8 @@ class PokerMentorBot:
         # Обработчики кнопок и сообщений
         self.application.add_handler(CallbackQueryHandler(self._handle_callback_query))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text_message))
+
+        self.application.add_handler(CommandHandler("test_ml_game", self._handle_test_ml_game))
     
     # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
     
@@ -566,7 +568,27 @@ class PokerMentorBot:
     
         await update.message.reply_text(text, parse_mode='Markdown')
 
-        
+    async def _handle_test_ml_game(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Тестовая игра с ML AI"""
+        user_id = str(update.effective_user.id)
+    
+        # Создаем игру с ML AI
+        game = self.game_manager.create_game(user_id, "fish", use_ml=True)
+        game_state = self.game_manager.get_game_state(user_id)
+    
+        # ИСПРАВЛЕННАЯ СТРОКА - убрано лишнее подчеркивание
+        game_text = TextTemplates.get_game_start_text(
+            game_state["ai_name"], 
+            "🤖 ML-Enhanced " + GameMenus.get_ai_description("fish"),
+            game_state["user_cards"],
+            game_state["user_stack"],
+            game_state["pot"]
+        )
+    
+        await update.message.reply_text(game_text)
+        await self._show_game_actions(update, context, user_id)
+
+
 # Точка входа
 if __name__ == "__main__":
     try:

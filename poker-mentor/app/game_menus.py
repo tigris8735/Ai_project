@@ -96,6 +96,21 @@ class TextTemplates:
 💡 *Используйте эти рекомендации для принятия решения*
         """
 
+    @staticmethod
+    def get_game_start_text(ai_name: str, ai_description: str, user_cards: list, user_stack: int, pot: int) -> str:
+        """Текст начала игры"""
+        cards_text = f"{user_cards[0]} {user_cards[1]}" if user_cards else "Карты не разданы"
+        
+        return (
+            f"🎮 **Игра началась!**\n\n"
+            f"🤖 **Оппонент:** {ai_name}\n"
+            f"📝 **Описание:** {ai_description}\n\n"
+            f"🃏 **Ваши карты:** {cards_text}\n"
+            f"💰 **Ваш стек:** {user_stack} BB\n"
+            f"🏦 **Текущий банк:** {pot} BB\n\n"
+            f"**Выберите действие:**"
+        )
+
 # Добавляем новые меню
 class AnalysisMenus:
     """Меню для анализа"""

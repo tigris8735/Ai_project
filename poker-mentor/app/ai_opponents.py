@@ -165,14 +165,14 @@ class LAGAI(BaseAI):
         else:
             return Action.CHECK, 0
 
+# Обновляем AIFactory
 class AIFactory:
-    """Фабрика для создания AI оппонентов"""
-    
     @staticmethod
-    def create_ai(ai_type: str) -> BaseAI:
+    def create_ai(ai_type: str, use_ml: bool = False) -> BaseAI:
+        """Создать AI оппонента с опцией ML"""
         ai_types = {
             "fish": FishAI,
-            "nit": NitAI,
+            "nit": NitAI, 
             "tag": TAGAI,
             "lag": LAGAI
         }
@@ -180,11 +180,14 @@ class AIFactory:
         if ai_type not in ai_types:
             raise ValueError(f"Unknown AI type: {ai_type}")
         
-        return ai_types[ai_type]()
-    
-    @staticmethod
-    def get_ai_types() -> List[str]:
-        return ["fish", "nit", "tag", "lag"]
+        base_ai = ai_types[ai_type]()
+        
+        if use_ml:
+            from app.ml.poker_model import create_poker_model
+            ml_model = create_poker_model()
+            return MLEnhancedAI(base_ai, ml_model)
+        else:
+            return base_ai
     
     # В ai_opponents.py - ОБНОВИТЬ:
 
@@ -238,25 +241,74 @@ def test_ai_opponents():
         print(f"{ai.name}: {action.value} {amount}")
 
 class MLEnhancedAI(BaseAI):
+    """AI с интеграцией ML модели для принятия решений"""
+    
     def __init__(self, base_ai: BaseAI, ml_model):
         self.base_ai = base_ai
         self.ml_model = ml_model
         self.name = f"ML-{base_ai.name}"
-        self.confidence_threshold = 0.7
+        self.aggression = base_ai.aggression
+        self.tightness = base_ai.tightness
+        self.ml_confidence_threshold = 0.6
     
     def decide_action(self, game: PokerGame, player: str) -> Tuple[Action, int]:
-        # Извлекаем фичи для ML
-        features = self._extract_ml_features(game, player)
-        
-        # Получаем предсказание от ML
-        ml_prediction = self.ml_model.predict(features)
-        ml_confidence = self.ml_model.get_confidence(features)
-        
-        if ml_confidence > self.confidence_threshold:
-            return self._ml_action_to_game_action(ml_prediction, game)
-        else:
-            # Fallback на rule-based AI
+        """Принять решение с использованием ML"""
+        try:
+            # Извлекаем фичи для ML
+            features = self._extract_ml_features(game, player)
+            
+            # Получаем предсказание от ML
+            ml_prediction = self.ml_model.predict_action(features)
+            
+            # Если ML уверен - используем его предсказание
+            if ml_prediction['confidence'] > self.ml_confidence_threshold:
+                action = self._convert_ml_action(ml_prediction['action'], game)
+                logger.info(f"ML AI decision: {action} (confidence: {ml_prediction['confidence']:.2f})")
+                return action
+            else:
+                # Fallback на rule-based AI
+                logger.info(f"ML low confidence, using rule-based: {ml_prediction['confidence']:.2f}")
+                return self.base_ai.decide_action(game, player)
+                
+        except Exception as e:
+            logger.error(f"ML AI error, falling back to rules: {e}")
             return self.base_ai.decide_action(game, player)
+    
+    def _extract_ml_features(self, game: PokerGame, player: str) -> list:
+        """Извлечение фич для ML модели"""
+        # Используем тот же метод, что и в GameManager
+        from app.game_manager import GameManager
+        temp_gm = GameManager()
+        
+        features_dict = temp_gm._extract_ml_features(
+            player.replace("user_", ""), 
+            "unknown", 
+            {}, 
+            game
+        )
+        
+        # Конвертируем в список фич как в data_pipeline
+        features = []
+        features.append(features_dict.get('hand_strength', 0.5))
+        features.append(features_dict.get('stack_ratio', 1.0))
+        features.append(features_dict.get('pot_ratio', 0.1))
+        # ... добавляем остальные фичи
+        
+        # Добиваем до 47 фич
+        while len(features) < 47:
+            features.append(0.0)
+            
+        return features[:47]
+    
+    def _convert_ml_action(self, ml_action: str, game: PokerGame) -> Tuple[Action, int]:
+        """Конвертация ML действия в игровое действие"""
+        action_map = {
+            'fold': (Action.FOLD, 0),
+            'check': (Action.CHECK, 0),
+            'call': (Action.CALL, game.current_bet),
+            'raise': (Action.RAISE, max(game.big_blind * 2, game.current_bet * 2))
+        }
+        return action_map.get(ml_action, (Action.FOLD, 0))
         
 
 if __name__ == "__main__":

@@ -14,9 +14,9 @@ class GameManager:
 
     
     
-    def create_game(self, user_id: str, ai_type: str = "fish") -> PokerGame:
-        """Создать новую игру"""
-        ai_opponent = AIFactory.create_ai(ai_type)
+    def create_game(self, user_id: str, ai_type: str = "fish", use_ml: bool = False) -> PokerGame:
+        """Создать новую игру с опцией ML AI"""
+        ai_opponent = AIFactory.create_ai(ai_type, use_ml)  # ← ДОБАВЛЯЕМ use_ml
         
         game = PokerGame([f"user_{user_id}", ai_opponent.name])
         game.ai_opponent = ai_opponent
@@ -24,7 +24,7 @@ class GameManager:
         game.post_blinds()
         
         self.active_games[user_id] = game
-        logger.info(f"Создана новая игра для пользователя {user_id} с AI {ai_type}")
+        logger.info(f"Создана новая игра для пользователя {user_id} с AI {ai_type} (ML: {use_ml})")
         
         return game
     
