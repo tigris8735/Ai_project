@@ -102,5 +102,20 @@ DEFAULT_GAME_TYPE=cash
             ]
         )
 
+
+class Config:
+    def __init__(self, config_file="config.txt"):
+        # ... существующий код ...
+        
+     def get_webhook_config(self):
+        """Получить конфигурацию webhook"""
+        return {
+            'host': self.get('WEBHOOK_HOST', 'https://yourdomain.com'),
+            'port': int(self.get('WEBHOOK_PORT', 8443)),
+            'path': self.get('WEBHOOK_PATH', '/webhook'),
+            'secret': self.get('WEBHOOK_SECRET', 'your_secret_token'),
+            'ssl_cert': self.get('SSL_CERT_PATH', ''),
+            'ssl_key': self.get('SSL_KEY_PATH', '')
+        }
 # Глобальный объект конфигурации
 config = Config()

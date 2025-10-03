@@ -4,3 +4,14 @@ alembic==1.12.1
 requests==2.31.0
 python-dotenv==1.0.0
 numpy==1.24.3
+
+# Web фреймворк
+flask==2.3.3
+gunicorn==21.2.0
+
+# Для HTTPS (обязательно для вебхуков)
+pyopenssl==23.2.0
+cryptography==41.0.4
+
+# Переменные окружения
+python-dotenv==1.0.0

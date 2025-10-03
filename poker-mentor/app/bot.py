@@ -44,7 +44,9 @@ class PokerMentorBot:
         # Настраиваем обработчики
         self._setup_handlers()
         logger.info("Poker Mentor Bot инициализирован")
-    
+
+        self.application.add_handler(CommandHandler("shutdown", self._handle_shutdown))
+        
     def _setup_handlers(self):
         """Настройка обработчиков команд - конструктор функциональности"""
         # Команды
@@ -565,7 +567,31 @@ class PokerMentorBot:
             text += f"⚠️ {result['message']}"
     
         await update.message.reply_text(text, parse_mode='Markdown')
+    async def _handle_shutdown(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда для graceful shutdown (только для админов)"""
+        user_id = update.effective_user.id
+        admin_ids = [123456789]  # Замените на ваши ID админов
+        
+        if user_id not in admin_ids:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+            
+        await update.message.reply_text("🔄 Выключаю бота...")
+        
+        # Останавливаем приложение
+        await self.application.stop()
+        await self.application.shutdown()
 
+    def run_webhook(self, webhook_url: str, secret_token: str):
+        """Запуск в webhook режиме"""
+        # Устанавливаем webhook
+        self.application.run_webhook(
+            listen="0.0.0.0",
+            port=8443,
+            url_path=webhook_url,
+            webhook_url=webhook_url,
+            secret_token=secret_token
+        )
         
 # Точка входа
 if __name__ == "__main__":

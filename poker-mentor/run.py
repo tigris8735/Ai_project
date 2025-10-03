@@ -1,40 +1,92 @@
 #!/usr/bin/env python3
-"""
-Poker Mentor Bot - Запускной файл
-"""
-
 import sys
 import os
+import logging
+from app.config import config
 
 # Добавляем папку app в путь Python
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
 
+def setup_webhook_config():
+    """Настройка конфигурации для webhook режима"""
+    webhook_config = {
+        'WEBHOOK_HOST': os.getenv('WEBHOOK_HOST', 'https://yourdomain.com'),
+        'WEBHOOK_PORT': int(os.getenv('WEBHOOK_PORT', 8443)),
+        'WEBHOOK_PATH': os.getenv('WEBHOOK_PATH', '/webhook'),
+        'WEBHOOK_SECRET': os.getenv('WEBHOOK_SECRET', 'your_secret_token_here'),
+        'SSL_CERT_PATH': os.getenv('SSL_CERT_PATH', '/path/to/cert.pem'),
+        'SSL_KEY_PATH': os.getenv('SSL_KEY_PATH', '/path/to/private.key')
+    }
+    
+    # Проверяем обязательные настройки для production
+    if not webhook_config['WEBHOOK_HOST'].startswith('https://'):
+        logging.warning("WEBHOOK_HOST должен использовать HTTPS для production")
+    
+    return webhook_config
+
 def main():
-    """Главная функция запуска"""
+    """Главная функция запуска с поддержкой webhook"""
     print("🎮 Poker Mentor Bot - Запуск...")
     print("=" * 50)
     
     try:
-        # Проверяем существование необходимых файлов
-        required_files = ['config.txt', 'app/bot.py', 'app/config.py']
-        for file in required_files:
-            if not os.path.exists(file):
-                print(f"❌ Отсутствует файл: {file}")
-                return
+        # Проверяем режим запуска
+        run_mode = os.getenv('RUN_MODE', 'polling').lower()
         
-        print("✅ Все необходимые файлы найдены")
-        
-        # Прямой импорт
-        from app.bot import PokerMentorBot
-        print("✅ Модули загружены успешно")
-        
-        bot = PokerMentorBot()
-        print("✅ Бот создан успешно")
-        print("🤖 Бот запускается...")
-        print("🛑 Для остановки нажмите Ctrl+C")
-        print("=" * 50)
-        
-        bot.run()
+        if run_mode == 'webhook':
+            print("🌐 Режим: WEBHOOK")
+            from app.bot import PokerMentorBot
+            from app.webhook_server import WebhookServer
+            
+            # Создаем бота
+            bot = PokerMentorBot()
+            
+            # Настраиваем webhook
+            webhook_config = setup_webhook_config()
+            webhook_url = f"{webhook_config['WEBHOOK_HOST']}{webhook_config['WEBHOOK_PATH']}"
+            
+            # Устанавливаем webhook в Telegram
+            import asyncio
+            async def setup_webhook():
+                await bot.application.bot.set_webhook(
+                    url=webhook_url,
+                    secret_token=webhook_config['WEBHOOK_SECRET'],
+                    max_connections=40
+                )
+                print(f"✅ Webhook установлен: {webhook_url}")
+            
+            asyncio.run(setup_webhook())
+            
+            # Создаем и запускаем webhook сервер
+            server = WebhookServer(
+                bot_application=bot.application,
+                host='0.0.0.0',
+                port=webhook_config['WEBHOOK_PORT']
+            )
+            
+            # Настраиваем SSL контекст
+            ssl_context = None
+            if os.path.exists(webhook_config['SSL_CERT_PATH']) and os.path.exists(webhook_config['SSL_KEY_PATH']):
+                ssl_context = (webhook_config['SSL_CERT_PATH'], webhook_config['SSL_KEY_PATH'])
+                print("🔐 SSL контекст загружен")
+            else:
+                print("⚠️  SSL сертификаты не найдены, запуск без HTTPS")
+            
+            print("🤖 Webhook сервер запускается...")
+            server.run(ssl_context=ssl_context)
+            
+        else:
+            # Режим polling (по умолчанию)
+            print("🔄 Режим: POLLING")
+            from app.bot import PokerMentorBot
+            
+            bot = PokerMentorBot()
+            print("✅ Бот создан успешно")
+            print("🤖 Бот запускается в polling режиме...")
+            print("🛑 Для остановки нажмите Ctrl+C")
+            print("=" * 50)
+            
+            bot.run()
         
     except KeyboardInterrupt:
         print("\n👋 До свидания! Бот остановлен.")
@@ -42,40 +94,6 @@ def main():
         print(f"💥 Ошибка: {e}")
         import traceback
         traceback.print_exc()
-        input("\nНажмите Enter для выхода...")
-
-# В run.py ДОБАВИТЬ тестовую функцию:
-
-def test_user_stories():
-    """Тестирование основных сценариев из User Stories"""
-    print("\n" + "="*50)
-    print("🧪 ТЕСТИРОВАНИЕ USER STORIES")
-    print("="*50)
-    
-    test_cases = [
-        {
-            "name": "US-001: Первый запуск бота",
-            "steps": ["/start", "Проверить приветствие", "Проверить главное меню"],
-            "expected": "Пользователь видит приветствие и меню"
-        },
-        {
-            "name": "US-003: Быстрая игра", 
-            "steps": ["🎮 Быстрая игра", "Проверить начало игры"],
-            "expected": "Игра начинается с дефолтными настройками"
-        },
-        {
-            "name": "US-005: Игровой процесс",
-            "steps": ["Сделать ход", "Проверить ответ AI", "Проверить обновление стека"],
-            "expected": "Игровой процесс работает корректно"
-        }
-    ]
-    
-    for test in test_cases:
-        print(f"✅ {test['name']}")
-        print(f"   Ожидается: {test['expected']}")
-    
-    print(f"\n🎯 Протестировано: {len(test_cases)} сценариев")
 
 if __name__ == "__main__":
     main()
-    test_user_stories()
