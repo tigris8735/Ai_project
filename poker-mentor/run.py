@@ -3,94 +3,84 @@ import os
 import sys
 import logging
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Добавляем app в путь Python
+sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
 
-# Добавляем текущую директорию в путь Python
-sys.path.append(os.path.dirname(__file__))
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-print("🔧 Импортируем модули...")
+print("🚀 Starting Poker Bot...")
 
 try:
-    # Проверяем основные импорты
-    from app.bot import PokerMentorBot
-    from app.config import config
-    print("✅ Основные модули загружены")
+    # Проверяем базовые импорты
+    from flask import Flask, request, jsonify
     
-    # Пропускаем проблемные ML модули на первое время
-    print("⚠️ Пропускаем ML модули для первого запуска")
+    app = Flask(__name__)
     
-except ImportError as e:
-    print(f"⚠️ Предупреждение: {e}")
-    # Продолжаем без некоторых модулей
-
-def main():
-    print("🎮 Poker Mentor Bot - Запуск на Railway...")
+    @app.route('/')
+    def home():
+        return """
+        <html>
+            <head><title>Poker Bot</title></head>
+            <body>
+                <h1>🎲 Poker Mentor Bot</h1>
+                <p>✅ Successfully deployed on Railway!</p>
+                <p><a href="/health">Health Check</a></p>
+            </body>
+        </html>
+        """
     
+    @app.route('/health')
+    def health():
+        return jsonify({"status": "healthy", "service": "poker-bot"})
+    
+    @app.route('/webhook', methods=['POST'])
+    def webhook():
+        try:
+            # Простой webhook для теста
+            data = request.get_json()
+            logger.info(f"Received webhook: {data}")
+            return jsonify({"status": "ok"})
+        except Exception as e:
+            logger.error(f"Webhook error: {e}")
+            return jsonify({"status": "error"}), 500
+    
+    # Пробуем импортировать бота
     try:
         from app.bot import PokerMentorBot
-        from app.webhook_server import create_app
-        
-        # Инициализируем бота
         bot = PokerMentorBot()
-        print("✅ Бот инициализирован")
+        logger.info("✅ Bot initialized successfully")
         
-        # Получаем URL Railway
+        # Настраиваем webhook если есть URL
         railway_url = os.getenv('RAILWAY_STATIC_URL') 
-        if not railway_url and os.getenv('RAILWAY_PUBLIC_DOMAIN'):
-            railway_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}"
-        
         if railway_url:
-            print(f"🌐 Railway URL: {railway_url}")
-            
-            # Настраиваем webhook
-            webhook_url = f"{railway_url}/webhook"
-            secret_token = os.getenv('WEBHOOK_SECRET', 'railway_secret_123')
-            
             import asyncio
             
             async def setup_webhook():
                 try:
-                    await bot.application.bot.delete_webhook()
-                    result = await bot.application.bot.set_webhook(
+                    webhook_url = f"{railway_url}/webhook"
+                    await bot.application.bot.set_webhook(
                         url=webhook_url,
-                        secret_token=secret_token,
-                        max_connections=40
+                        secret_token=os.getenv('WEBHOOK_SECRET', 'default_secret')
                     )
-                    if result:
-                        print(f"✅ Webhook установлен: {webhook_url}")
-                        
-                        # Проверяем webhook info
-                        webhook_info = await bot.application.bot.get_webhook_info()
-                        print(f"📊 Webhook info: {webhook_info.url}")
-                    else:
-                        print("❌ Ошибка установки webhook")
+                    logger.info(f"✅ Webhook set: {webhook_url}")
                 except Exception as e:
-                    print(f"⚠️ Ошибка webhook: {e}")
-                    # Продолжаем работу даже если webhook не установился
+                    logger.error(f"❌ Webhook setup failed: {e}")
             
             asyncio.run(setup_webhook())
             
-            # Запускаем Flask
-            flask_app = create_app(bot.application)
-            port = int(os.getenv('PORT', 8000))
-            
-            print(f"🚀 Сервер запущен на порту {port}")
-            print("📱 Бот готов к работе!")
-            flask_app.run(host='0.0.0.0', port=port, debug=False)
-            
-        else:
-            print("❌ Не удалось определить URL Railway")
-            print("🔄 Запуск в polling режиме...")
-            bot.run()
-            
+    except ImportError as e:
+        logger.warning(f"⚠️ Could not import bot: {e}")
     except Exception as e:
-        print(f"💥 Критическая ошибка: {e}")
-        import traceback
-        traceback.print_exc()
-
-if __name__ == "__main__":
-    main()
+        logger.error(f"❌ Bot initialization failed: {e}")
+    
+    # Запускаем сервер
+    if __name__ == "__main__":
+        port = int(os.getenv('PORT', 8000))
+        logger.info(f"Starting server on port {port}")
+        app.run(host='0.0.0.0', port=port, debug=False)
+        
+except Exception as e:
+    logger.error(f"💥 Critical error: {e}")
+    import traceback
+    traceback.print_exc()

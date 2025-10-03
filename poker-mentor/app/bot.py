@@ -6,8 +6,8 @@ from app.database import db
 from app.game_menus import GameMenus, TextTemplates
 from app.game_manager import GameManager
 from app.hand_analyzer import hand_analyzer, history_analyzer
-from app.history_manager import history_manager
-from app.statistics import stats_manager
+# from app.history_manager import history_manager
+# from app.statistics import stats_manager
 # from app.ml.model_trainer import model_trainer
 
 # В начале файла добавьте:
