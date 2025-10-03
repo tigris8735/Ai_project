@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self):
-        self.database_url = config.get('DATABASE_URL', 'sqlite:///poker_mentor.db')
+        self.database_url = os.getenv('DATABASE_URL', 'sqlite:///poker_mentor.db')
         self.engine = create_engine(self.database_url)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         
