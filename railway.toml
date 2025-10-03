@@ -1,6 +1,0 @@
-[build]
-builder = "nixpacks"
-command = "pip install -r requirements.txt"
-
-[deploy]
-startCommand = "python run.py"

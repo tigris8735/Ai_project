@@ -1,6 +1,0 @@
-app/ml/
-app/__pycache__/
-*.db
-docker-compose.yml
-Dockerfile
-nginx.conf
