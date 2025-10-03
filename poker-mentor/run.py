@@ -2,7 +2,7 @@
 """
 Poker Mentor Bot - Запускной файл
 """
-
+## вроде бекапул
 import sys
 import os
 
