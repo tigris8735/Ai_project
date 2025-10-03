@@ -1,99 +1,97 @@
 #!/usr/bin/env python3
-import sys
 import os
+import sys
 import logging
-from app.config import config
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Добавляем папку app в путь Python
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
 
-def setup_webhook_config():
-    """Настройка конфигурации для webhook режима"""
-    webhook_config = {
-        'WEBHOOK_HOST': os.getenv('WEBHOOK_HOST', 'https://yourdomain.com'),
-        'WEBHOOK_PORT': int(os.getenv('WEBHOOK_PORT', 8443)),
-        'WEBHOOK_PATH': os.getenv('WEBHOOK_PATH', '/webhook'),
-        'WEBHOOK_SECRET': os.getenv('WEBHOOK_SECRET', 'your_secret_token_here'),
-        'SSL_CERT_PATH': os.getenv('SSL_CERT_PATH', '/path/to/cert.pem'),
-        'SSL_KEY_PATH': os.getenv('SSL_KEY_PATH', '/path/to/private.key')
-    }
-    
-    # Проверяем обязательные настройки для production
-    if not webhook_config['WEBHOOK_HOST'].startswith('https://'):
-        logging.warning("WEBHOOK_HOST должен использовать HTTPS для production")
-    
-    return webhook_config
-
 def main():
-    """Главная функция запуска с поддержкой webhook"""
-    print("🎮 Poker Mentor Bot - Запуск...")
+    print("🎮 Poker Mentor Bot - Запуск на Railway...")
     print("=" * 50)
     
     try:
-        # Проверяем режим запуска
-        run_mode = os.getenv('RUN_MODE', 'polling').lower()
+        from app.bot import PokerMentorBot
+        from app.config import config
+        from app.webhook_server import create_app
         
-        if run_mode == 'webhook':
-            print("🌐 Режим: WEBHOOK")
-            from app.bot import PokerMentorBot
-            from app.webhook_server import WebhookServer
-            
-            # Создаем бота
-            bot = PokerMentorBot()
+        # Инициализируем бота
+        bot = PokerMentorBot()
+        print("✅ Бот инициализирован")
+        
+        # Получаем конфигурацию webhook
+        webhook_host = os.getenv('RAILWAY_STATIC_URL')
+        if not webhook_host:
+            # Если Railway не предоставил URL, используем дефолтный
+            webhook_host = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}" if os.getenv('RAILWAY_PUBLIC_DOMAIN') else None
+        
+        if webhook_host:
+            print(f"🌐 Обнаружен Railway URL: {webhook_host}")
             
             # Настраиваем webhook
-            webhook_config = setup_webhook_config()
-            webhook_url = f"{webhook_config['WEBHOOK_HOST']}{webhook_config['WEBHOOK_PATH']}"
+            webhook_url = f"{webhook_host}/webhook"
+            secret_token = os.getenv('WEBHOOK_SECRET', 'default_railway_secret')
             
-            # Устанавливаем webhook в Telegram
             import asyncio
-            async def setup_webhook():
-                await bot.application.bot.set_webhook(
-                    url=webhook_url,
-                    secret_token=webhook_config['WEBHOOK_SECRET'],
-                    max_connections=40
-                )
-                print(f"✅ Webhook установлен: {webhook_url}")
             
+            async def setup_webhook():
+                try:
+                    # Удаляем старый webhook если есть
+                    await bot.application.bot.delete_webhook()
+                    
+                    # Устанавливаем новый webhook
+                    result = await bot.application.bot.set_webhook(
+                        url=webhook_url,
+                        secret_token=secret_token,
+                        max_connections=40,
+                        allowed_updates=["message", "callback_query"]
+                    )
+                    
+                    if result:
+                        print(f"✅ Webhook установлен: {webhook_url}")
+                        
+                        # Проверяем информацию о webhook
+                        webhook_info = await bot.application.bot.get_webhook_info()
+                        print(f"📊 Webhook info: {webhook_info.url}")
+                    else:
+                        print("❌ Ошибка установки webhook")
+                        
+                except Exception as e:
+                    print(f"❌ Ошибка настройки webhook: {e}")
+                    # Продолжаем работу даже если webhook не установился
+            
+            # Запускаем настройку webhook
             asyncio.run(setup_webhook())
             
-            # Создаем и запускаем webhook сервер
-            server = WebhookServer(
-                bot_application=bot.application,
-                host='0.0.0.0',
-                port=webhook_config['WEBHOOK_PORT']
-            )
+            # Создаем и запускаем Flask приложение
+            flask_app = create_app(bot.application)
             
-            # Настраиваем SSL контекст
-            ssl_context = None
-            if os.path.exists(webhook_config['SSL_CERT_PATH']) and os.path.exists(webhook_config['SSL_KEY_PATH']):
-                ssl_context = (webhook_config['SSL_CERT_PATH'], webhook_config['SSL_KEY_PATH'])
-                print("🔐 SSL контекст загружен")
-            else:
-                print("⚠️  SSL сертификаты не найдены, запуск без HTTPS")
+            port = int(os.getenv('PORT', 8000))
+            host = '0.0.0.0'
             
-            print("🤖 Webhook сервер запускается...")
-            server.run(ssl_context=ssl_context)
+            print(f"🚀 Запуск веб-сервера на {host}:{port}")
+            print("📧 Бот готов принимать сообщения!")
+            
+            # Запускаем Flask (Railway сам управляет процессом)
+            flask_app.run(host=host, port=port, debug=False)
             
         else:
-            # Режим polling (по умолчанию)
-            print("🔄 Режим: POLLING")
-            from app.bot import PokerMentorBot
-            
-            bot = PokerMentorBot()
-            print("✅ Бот создан успешно")
-            print("🤖 Бот запускается в polling режиме...")
-            print("🛑 Для остановки нажмите Ctrl+C")
-            print("=" * 50)
-            
+            print("❌ Не удалось определить URL для webhook")
+            print("🔄 Запуск в polling режиме...")
             bot.run()
-        
-    except KeyboardInterrupt:
-        print("\n👋 До свидания! Бот остановлен.")
+            
     except Exception as e:
-        print(f"💥 Ошибка: {e}")
+        logger.error(f"💥 Критическая ошибка: {e}")
         import traceback
         traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
