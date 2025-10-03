@@ -1,8 +1,8 @@
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-from app.config import config
-from app.database import db
+# from app.config import config
+# from app.database import db
 from app.game_menus import GameMenus, TextTemplates
 from app.game_manager import GameManager
 from app.hand_analyzer import hand_analyzer, history_analyzer
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class PokerMentorBot:
     """Главный класс бота - конструктор функциональности"""
-    
+    '''    
     def __init__(self):
         # Проверяем конфигурацию
         is_valid, message = config.validate()
@@ -46,7 +46,8 @@ class PokerMentorBot:
         logger.info("Poker Mentor Bot инициализирован")
 
         self.application.add_handler(CommandHandler("shutdown", self._handle_shutdown))
-        
+    '''     
+
     def _setup_handlers(self):
         """Настройка обработчиков команд - конструктор функциональности"""
         # Команды
@@ -76,20 +77,20 @@ class PokerMentorBot:
         user = update.effective_user
         
         # Сохраняем пользователя в БД
-        db_user = db.add_user(
-            telegram_id=user.id,
-            username=user.username,
-            first_name=user.first_name,
-            last_name=user.last_name
-        )
+   #     db_user = db.add_user(
+    #        telegram_id=user.id,
+     #       username=user.username,
+      #      first_name=user.first_name,
+       #     last_name=user.last_name
+        #)
         
         # Получаем статистику
-        user_stats = db.get_user_stats(db_user['id'])
-        hands_played = user_stats['total_hands_played'] if user_stats else 0
+#        user_stats = db.get_user_stats(db_user['id'])
+#        hands_played = user_stats['total_hands_played'] if user_stats else 0
         
         # Отправляем приветствие
         welcome_text = TextTemplates.get_welcome_text(
-            user.first_name, db_user['level'], hands_played
+#            user.first_name, db_user['level'], hands_played
         )
         
         await update.message.reply_text(
@@ -106,8 +107,8 @@ class PokerMentorBot:
         await update.message.reply_text(
             "⚙️ Текущие настройки:\n"
             f"• Версия: 1.0\n"
-            f"• База данных: {config.get('DATABASE_URL', 'Не настроена')}\n"
-            f"• Ставки: {config.get('DEFAULT_STAKE', '1/2')}\n\n"
+  #          f"• База данных: {config.get('DATABASE_URL', 'Не настроена')}\n"
+ #           f"• Ставки: {config.get('DEFAULT_STAKE', '1/2')}\n\n"
             "Для изменения настроек отредактируйте файл config.txt"
         )
     
@@ -489,7 +490,7 @@ class PokerMentorBot:
 
     👤 Пользователь: {user_id}
     🎮 Активных игр: {len(self.game_manager.active_games)}
-    💾 База данных: {config.get('DATABASE_URL')}
+    💾 База данных: {2+2}
 
     📊 Статистика:
     • Пользователей в БД: {self._get_user_count()}
@@ -500,32 +501,32 @@ class PokerMentorBot:
     async def _handle_history(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показать историю игр"""
         user_id = update.effective_user.id
-        sessions = history_manager.get_recent_sessions(user_id, 5)
+#        sessions = history_manager.get_recent_sessions(user_id, 5)
     
-        if not sessions:
-            await update.message.reply_text("📝 У вас еще нет сыгранных сессий")
-            return
+ #       if not sessions:
+  #          await update.message.reply_text("📝 У вас еще нет сыгранных сессий")
+   #         return
     
         text = "📊 **Последние игры:**\n\n"
-        for session in sessions:
-            text += f"🕐 **{session['date']}**\n"
-            text += f"🤖 Оппонент: {session['opponent']}\n"
-            text += f"🎯 Рук: {session['hands_played']} | Результат: {session['result']}\n"
-            text += f"⏱️ Длительность: {session['duration']}\n\n"
+    #    for session in sessions:
+     #       text += f"🕐 **{session['date']}**\n"
+      #      text += f"🤖 Оппонент: {session['opponent']}\n"
+       #     text += f"🎯 Рук: {session['hands_played']} | Результат: {session['result']}\n"
+        #    text += f"⏱️ Длительность: {session['duration']}\n\n"
     
         await update.message.reply_text(text, parse_mode='Markdown')
 
     async def _handle_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показать статистику"""
         user_id = update.effective_user.id
-        stats = stats_manager.get_user_stats(user_id)
+        #stats = stats_manager.get_user_stats(user_id)
     
-        text = "📈 **Ваша статистика:**\n\n"
-        text += f"🎓 **Уровень:** {stats['level'].title()}\n"
-        text += f"🃏 **Сыграно рук:** {stats['total_hands']}\n"
-        text += f"📊 **Винрейт:** {stats['win_rate']}\n"
-        text += f"🎯 **VPIP/PFR:** {stats['vpip']}/{stats['pfr']}\n"
-        text += f"⚡ **Агрессия:** {stats['aggression']}\n\n"
+        #text = "📈 **Ваша статистика:**\n\n"
+        #text += f"🎓 **Уровень:** {stats['level'].title()}\n"
+        #text += f"🃏 **Сыграно рук:** {stats['total_hands']}\n"
+        #text += f"📊 **Винрейт:** {stats['win_rate']}\n"
+        #text += f"🎯 **VPIP/PFR:** {stats['vpip']}/{stats['pfr']}\n"
+        #text += f"⚡ **Агрессия:** {stats['aggression']}\n\n"
     
         text += "⭐ **Лучшая рука:** {stats['best_hand']}\n"
         text += "💡 **Основная утечка:** {stats['worst_leak']}\n"
@@ -536,35 +537,35 @@ class PokerMentorBot:
         await update.message.reply_text(text, parse_mode='Markdown')
     async def _handle_ml_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Статус ML системы"""
-        status = model_trainer.get_training_status()
+        #status = model_trainer.get_training_status()
     
-        text = "🤖 **Статус ML системы:**\n\n"
-        text += f"📊 **Данных собрано:** {status['data_collected']}\n"
-        text += f"🎯 **Статус:** {status['status']}\n"
-        text += f"💡 **Рекомендация:** {status['recommendation']}\n\n"
+        #text = "🤖 **Статус ML системы:**\n\n"
+        #text += f"📊 **Данных собрано:** {status['data_collected']}\n"
+        #text += f"🎯 **Статус:** {status['status']}\n"
+        #text += f"💡 **Рекомендация:** {status['recommendation']}\n\n"
     
-        if status['data_collected'] > 0:
-            text += "_Используйте /train_ml для запуска обучения_"
+        #if status['data_collected'] > 0:
+        #    text += "_Используйте /train_ml для запуска обучения_"
     
-        await update.message.reply_text(text, parse_mode='Markdown')
+        #await update.message.reply_text(text, parse_mode='Markdown')
 
     async def _handle_train_ml(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Запуск обучения ML модели"""
-        result = model_trainer.start_training()
+        #result = model_trainer.start_training()
     
         text = "🎯 **Результат обучения ML:**\n\n"
     
-        if result['status'] == 'success':
-            text += "✅ **Обучение завершено!**\n"
-            text += f"📈 **Точность:** {result['accuracy']}\n"
-            text += f"💡 **Следующий шаг:** {result['next_step']}\n"
-        elif result['status'] == 'need_more_data':
-            text += "📊 **Нужно больше данных:**\n"
-            text += f"📝 {result['message']}\n"
-            text += "💡 _Продолжайте играть для сбора данных_"
-        else:
-            text += "❌ **Ошибка обучения:**\n"
-            text += f"⚠️ {result['message']}"
+        #if result['status'] == 'success':
+         #   text += "✅ **Обучение завершено!**\n"
+          #  text += f"📈 **Точность:** {result['accuracy']}\n"
+           # text += f"💡 **Следующий шаг:** {result['next_step']}\n"
+        #elif result['status'] == 'need_more_data':
+         #   text += "📊 **Нужно больше данных:**\n"
+          #  text += f"📝 {result['message']}\n"
+           # text += "💡 _Продолжайте играть для сбора данных_"
+        #else:
+         #   text += "❌ **Ошибка обучения:**\n"
+          #  text += f"⚠️ {result['message']}"
     
         await update.message.reply_text(text, parse_mode='Markdown')
     async def _handle_shutdown(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

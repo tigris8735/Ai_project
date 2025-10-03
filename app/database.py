@@ -1,8 +1,8 @@
+import os
 import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.models import Base, User, GameSession, HandHistory, UserStats
-from app.config import config
 from datetime import datetime
 from app.models import UserLevel, GameType, SessionStatus
 
@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self):
+        # ИСПРАВЬ ЭТУ СТРОКУ:
         self.database_url = os.getenv('DATABASE_URL', 'sqlite:///poker_mentor.db')
         self.engine = create_engine(self.database_url)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
