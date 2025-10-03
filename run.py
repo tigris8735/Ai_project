@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🎲 POKER BOT РАБОТАЕТ НАХУЙ! 🎲"
+    return "🎲онр! 🎲"
 
 @app.route('/health')
 def health():
@@ -13,4 +13,4 @@ def health():
 
 if __name__ == "__main__":
     port = int(os.getenv('PORT', 8000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='5.0.5.0', port=port)
