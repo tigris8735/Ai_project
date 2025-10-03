@@ -1,7 +1,5 @@
 [build]
-builder = "nixpacks"
+builder = "heroku/buildpacks:20"
 
 [deploy]
 startCommand = "python run.py"
-healthcheckPath = "/health"
-healthcheckTimeout = 300
