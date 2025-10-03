@@ -8,7 +8,7 @@ from app.game_manager import GameManager
 from app.hand_analyzer import hand_analyzer, history_analyzer
 from app.history_manager import history_manager
 from app.statistics import stats_manager
-from app.ml.model_trainer import model_trainer
+# from app.ml.model_trainer import model_trainer
 
 # В начале файла добавьте:
 from app.poker_engine import Card, Rank, Suit
