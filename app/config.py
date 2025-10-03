@@ -12,16 +12,15 @@ class Config:
     def _load_config(self):
         """Загрузка конфигурации из файла"""
         try:
+            # Если файла нет - используем переменные окружения
             if not os.path.exists(self.config_file):
                 self._create_default_config()
             
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
-                    # Пропускаем пустые строки и комментарии
                     if not line or line.startswith('#'):
                         continue
-                    # Разбираем ключ=значение
                     if '=' in line:
                         key, value = line.split('=', 1)
                         self.config[key.strip()] = value.strip()
@@ -36,11 +35,7 @@ class Config:
         """Создание файла конфигурации по умолчанию"""
         default_config = """# Конфигурация Poker Mentor Bot
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-
-# Настройки базы данных
 DATABASE_URL=sqlite:///poker_mentor.db
-
-# Настройки игры
 DEFAULT_STAKE=1/2
 DEFAULT_GAME_TYPE=cash
 """
@@ -48,13 +43,17 @@ DEFAULT_GAME_TYPE=cash
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 f.write(default_config)
             logger.info(f"Создан файл конфигурации: {self.config_file}")
-            print(f"📁 Создан файл конфигурации: {self.config_file}")
-            print("🔧 Пожалуйста, установите ваш TELEGRAM_BOT_TOKEN в этом файле")
         except Exception as e:
             logger.error(f"Ошибка создания конфигурации: {e}")
     
     def get(self, key, default=None):
-        """Получить значение конфигурации"""
+        """Получить значение конфигурации - ЭТОТ МЕТОД ДОБАВЬ!"""
+        # Сначала проверяем переменные окружения (для Railway)
+        env_value = os.getenv(key)
+        if env_value:
+            return env_value
+        
+        # Потом проверяем config файл
         return self.config.get(key, default)
     
     def set(self, key, value):
@@ -88,19 +87,6 @@ DEFAULT_GAME_TYPE=cash
             return False, error_msg
         
         return True, "Конфигурация валидна"
-        
-# В config.py ДОБАВИТЬ:
-
-    def setup_logging():
-        """Настройка расширенного логирования"""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler('poker_mentor.log', encoding='utf-8'),
-                logging.StreamHandler()
-            ]
-        )
 
 # Глобальный объект конфигурации
 config = Config()
